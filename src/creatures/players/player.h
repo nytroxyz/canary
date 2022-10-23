@@ -2263,6 +2263,8 @@ class Player final : public Creature, public Cylinder {
 			}
 		}
 
+		int32_t getBaseAttack(uint32_t level) const;
+
 	private:
 		static uint32_t playerFirstID;
 		static uint32_t playerLastID;
