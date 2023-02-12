@@ -12,7 +12,6 @@
 
 #include "utils/utils_definitions.hpp"
 #include "declarations.hpp"
-#include "enums/item_attribute.hpp"
 #include "game/movement/position.h"
 
 void printXMLError(const std::string& where, const std::string& fileName, const pugi::xml_parse_result& result);
@@ -84,7 +83,7 @@ std::string getWeaponName(WeaponType_t weaponType);
 size_t combatTypeToIndex(CombatType_t combatType);
 CombatType_t indexToCombatType(size_t v);
 
-ItemAttribute_t stringToItemAttribute(const std::string& str);
+ItemAttrTypes stringToItemAttribute(const std::string& str);
 
 const char* getReturnMessage(ReturnValue value);
 

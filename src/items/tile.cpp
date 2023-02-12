@@ -512,7 +512,7 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t tileF
 			}
 
 			if (monster->isSummon()) {
-				if (ground->getID() >= ITEM_WALKABLE_SEA_START && ground->getID() <= ITEM_WALKABLE_SEA_END) {
+				if (ground->getID() >= ITEM_WALKABLE_SEA_START && ground->getID() <= ITEM_WALKABLE_SEA_END) { 
 					return RETURNVALUE_NOTPOSSIBLE;
 				}
 			}
@@ -586,10 +586,6 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t tileF
 				}
 			}
 
-			if(hasBitSet(FLAG_PATHFINDING, tileFlags) && hasFlag(TILESTATE_MAGICFIELD) && !fieldIsUnharmable()){
-				return RETURNVALUE_NOTPOSSIBLE;
-			}
-
 			if (player->getParent() == nullptr && hasFlag(TILESTATE_NOLOGOUT)) {
 				//player is trying to login to a "no logout" tile
 				return RETURNVALUE_NOTPOSSIBLE;
@@ -643,7 +639,7 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t tileF
 			//FLAG_IGNOREBLOCKITEM is set
 			if (ground) {
 				const ItemType& iiType = Item::items[ground->getID()];
-				if (iiType.blockSolid && (!iiType.moveable || ground->hasAttribute(ItemAttribute_t::UNIQUEID))) {
+				if (iiType.blockSolid && (!iiType.moveable || ground->hasAttribute(ITEM_ATTRIBUTE_UNIQUEID))) {
 					return RETURNVALUE_NOTPOSSIBLE;
 				}
 			}
@@ -651,7 +647,7 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t tileF
 			if (const auto items = getItemList()) {
 				for (const Item* item : *items) {
 					const ItemType& iiType = Item::items[item->getID()];
-					if (iiType.blockSolid && (!iiType.moveable || item->hasAttribute(ItemAttribute_t::UNIQUEID))) {
+					if (iiType.blockSolid && (!iiType.moveable || item->hasAttribute(ITEM_ATTRIBUTE_UNIQUEID))) {
 						return RETURNVALUE_NOTPOSSIBLE;
 					}
 				}
@@ -728,11 +724,6 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t tileF
 		}
 	}
 	return RETURNVALUE_NOERROR;
-}
-
-bool Tile::fieldIsUnharmable() const {
-	uint16_t fieldId = getFieldItem()->getID();
-	return fieldId == ITEM_FIREFIELD_PVP_SMALL || fieldId == ITEM_FIREFIELD_PERSISTENT_SMALL;
 }
 
 ReturnValue Tile::queryMaxCount(int32_t, const Thing&, uint32_t count, uint32_t& maxQueryCount, uint32_t) const

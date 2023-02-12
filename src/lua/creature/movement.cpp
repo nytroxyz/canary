@@ -168,8 +168,8 @@ MoveEvent* MoveEvents::getEvent(Item& item, MoveEvent_t eventType, Slots_t slot)
 		default: slotp = 0; break;
 	}
 
-	if (item.hasAttribute(ItemAttribute_t::ACTIONID)) {
-		std::map<int32_t, MoveEventList>::iterator it = actionIdMap.find(item.getAttribute<uint16_t>(ItemAttribute_t::ACTIONID));
+	if (item.hasAttribute(ITEM_ATTRIBUTE_ACTIONID)) {
+		std::map<int32_t, MoveEventList>::iterator it = actionIdMap.find(item.getActionId());
 		if (it != actionIdMap.end()) {
 			std::list<MoveEvent>& moveEventList = it->second.moveEvent[eventType];
 			for (MoveEvent& moveEvent : moveEventList) {
@@ -194,8 +194,8 @@ MoveEvent* MoveEvents::getEvent(Item& item, MoveEvent_t eventType, Slots_t slot)
 
 MoveEvent* MoveEvents::getEvent(Item& item, MoveEvent_t eventType) {
 	std::map<int32_t, MoveEventList>::iterator it;
-	if (item.hasAttribute(ItemAttribute_t::UNIQUEID)) {
-		it = uniqueIdMap.find(item.getAttribute<uint16_t>(ItemAttribute_t::UNIQUEID));
+	if (item.hasAttribute(ITEM_ATTRIBUTE_UNIQUEID)) {
+		it = uniqueIdMap.find(item.getUniqueId());
 		if (it != uniqueIdMap.end()) {
 			std::list<MoveEvent>& moveEventList = it->second.moveEvent[eventType];
 			if (!moveEventList.empty()) {
@@ -204,8 +204,8 @@ MoveEvent* MoveEvents::getEvent(Item& item, MoveEvent_t eventType) {
 		}
 	}
 
-	if (item.hasAttribute(ItemAttribute_t::ACTIONID)) {
-		it = actionIdMap.find(item.getAttribute<uint16_t>(ItemAttribute_t::ACTIONID));
+	if (item.hasAttribute(ITEM_ATTRIBUTE_ACTIONID)) {
+		it = actionIdMap.find(item.getActionId());
 		if (it != actionIdMap.end()) {
 			std::list<MoveEvent>& moveEventList = it->second.moveEvent[eventType];
 			if (!moveEventList.empty()) {
@@ -487,6 +487,8 @@ uint32_t MoveEvent::EquipItem(MoveEvent *moveEvent, Player* player, Item* item, 
 		}
 
 		player->addItemImbuementStats(imbuementInfo.imbuement);
+		g_game().increasePlayerActiveImbuements(player->getID());
+		player->updateInventoryImbuement(true);
 	}
 
 	if (it.abilities) {
@@ -530,6 +532,27 @@ uint32_t MoveEvent::EquipItem(MoveEvent *moveEvent, Player* player, Item* item, 
 
 			player->addCondition(condition);
 		}
+		
+		for (uint16_t combat = 0; combat <= 11; combat++) {
+		if (it.abilities->specializedMagicLevel[combat] != 0)
+			player->setSpecializedMagicLevel(indexToCombatType(combat), it.abilities->specializedMagicLevel[combat]); 
+	}
+
+	if (it.abilities->perfectShotRange != 0) {
+		player->setPerfectShotDamage(it.abilities->perfectShotRange, it.abilities->perfectShotDamage);
+	}
+
+	if (it.abilities->magicShieldCapacityFlat != 0) {
+		player->setMagicShieldCapacityFlat(it.abilities->magicShieldCapacityFlat);
+	}
+
+	if (it.abilities->magicShieldCapacityPercent != 0) {
+		player->setMagicShieldCapacityPercent(it.abilities->magicShieldCapacityPercent);
+	}
+
+	if (it.abilities->cleavePercent != 0) {
+		player->setCleavePercent(it.abilities->cleavePercent);
+	}
 
 		// Skill and stats modifiers
 		for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
@@ -583,6 +606,8 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, Slots_t 
 		}
 
 		player->removeItemImbuementStats(imbuementInfo.imbuement);
+		g_game().decreasePlayerActiveImbuements(player->getID());
+		player->updateInventoryImbuement(true);
 	}
 
 	if (it.abilities) {
@@ -606,6 +631,27 @@ uint32_t MoveEvent::DeEquipItem(MoveEvent*, Player* player, Item* item, Slots_t 
 		if (it.abilities->regeneration) {
 			player->removeCondition(CONDITION_REGENERATION, static_cast<ConditionId_t>(slot));
 		}
+		
+		for (uint16_t combat = 0; combat <= 11; combat++) {
+		if (it.abilities->specializedMagicLevel[combat] != 0)
+			player->setSpecializedMagicLevel(indexToCombatType(combat), -it.abilities->specializedMagicLevel[combat]);
+	}
+
+	if (it.abilities->perfectShotRange != 0) {
+		player->setPerfectShotDamage(it.abilities->perfectShotRange, -it.abilities->perfectShotDamage);
+	}
+
+	if (it.abilities->cleavePercent != 0) {
+		player->setCleavePercent(-it.abilities->cleavePercent);
+	}
+
+	if (it.abilities->magicShieldCapacityFlat != 0) {
+		player->setMagicShieldCapacityFlat(-it.abilities->magicShieldCapacityFlat);
+	}
+
+	if (it.abilities->magicShieldCapacityPercent != 0) {
+		player->setMagicShieldCapacityPercent(-it.abilities->magicShieldCapacityPercent);
+	}
 
 		// Skill and stats modifiers
 		for (int32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
@@ -680,6 +726,7 @@ bool MoveEvent::executeStep(Creature& creature, Item* item, const Position& pos)
 }
 
 uint32_t MoveEvent::fireEquip(Player& player, Item& item, Slots_t toSlot, bool isCheck) {
+	g_game().playerRequestInventoryImbuements(player.getID());
 	if (isLoadedCallback()) {
 		if (!equipFunction || equipFunction(this, &player, &item, toSlot, isCheck) == 1) {
 			if (executeEquip(player, item, toSlot, isCheck)) {

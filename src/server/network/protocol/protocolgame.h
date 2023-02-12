@@ -126,6 +126,9 @@ private:
 	void parseDepotSearchItemRequest(NetworkMessage &msg);
 	void parseOpenParentContainer(NetworkMessage &msg);
 	void parseRetrieveDepotSearch(NetworkMessage &msg);
+	
+	void parseInventoryImbuements(NetworkMessage &msg);
+	void sendInventoryImbuements(std::map<Slots_t, Item*> items);
 
 	void parseFightModes(NetworkMessage &msg);
 	void parseAttack(NetworkMessage &msg);
@@ -270,6 +273,8 @@ private:
 	void sendTransferItemTier(uint16_t firstItem, uint8_t tier, uint16_t secondItem);
 	void sendForgeHistory(uint8_t page);
 	void sendForgeSkillStats(NetworkMessage &msg) const;
+	
+	void sendWheelOfDestinyGiftOfLifeCooldown();
 
 	void sendDistanceShoot(const Position &from, const Position &to, uint8_t type);
 	void sendMagicEffect(const Position &pos, uint8_t type);
@@ -367,7 +372,7 @@ private:
 
 	void sendCreatureSquare(const Creature *creature, SquareColor_t color);
 
-	void sendSpellCooldown(uint8_t spellId, uint32_t time);
+	void sendSpellCooldown(uint16_t spellId, uint32_t time);
 	void sendSpellGroupCooldown(SpellGroup_t groupId, uint32_t time);
 	void sendUseItemCooldown(uint32_t time);
 
@@ -413,6 +418,9 @@ private:
 	void sendUpdateSupplyTracker(const Item *item);
 	void sendUpdateImpactTracker(CombatType_t type, int32_t amount);
 	void sendUpdateInputAnalyzer(CombatType_t type, int32_t amount, std::string target);
+	
+	// Hazard system
+	void reloadHazardSystemIcon(uint16_t reference);
 
 	// Hotkey equip/dequip item
 	void parseHotkeyEquip(NetworkMessage &msg);

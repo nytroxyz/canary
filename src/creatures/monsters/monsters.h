@@ -79,6 +79,12 @@ class MonsterType
 		uint16_t baseSpeed = 110;
 
 		uint64_t experience = 0;
+		
+		// Hazard system (0-10000), divide by 100 gives us %
+		uint16_t hazardSystemCritChance = 0;
+		bool canDamageBoost = false;
+		bool canSpawnPod = false;
+		bool canDodge = false;
 
 		uint32_t manaCost = 0;
 		uint32_t yellChance = 0;
@@ -119,6 +125,8 @@ class MonsterType
 		int32_t strategiesTargetRandom = 0;
 		bool targetPreferPlayer = false;
 		bool targetPreferMaster = false;
+		
+		float mitigation = 0;
 
 		Faction_t faction = FACTION_DEFAULT;
 		phmap::flat_hash_set<Faction_t> enemyFactions;

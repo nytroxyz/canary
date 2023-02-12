@@ -56,9 +56,11 @@ function bossDeath.onDeath(creature, corpse, killer, mostDamageKiller, lastHitUn
 		for _, con in ipairs(scores) do
 			-- Ignoring stamina for now because I heard you get receive rewards even when it's depleted
 			local reward, stamina
+			local boostedFactor = 0
 			if con.player then
 				reward = con.player:getReward(timestamp, true)
 				stamina = con.player:getStamina()
+				boostedFactor = BosstiarySystem.GetPlayerBossLootBonus(con.player, creature:getName(), nil)
 			else
 				stamina = con.stamina or 0
 			end
@@ -70,7 +72,7 @@ function bossDeath.onDeath(creature, corpse, killer, mostDamageKiller, lastHitUn
 				lootFactor = lootFactor / participants ^ (1 / 3)
 				-- Increase the loot multiplicatively by how many times the player surpassed the expected score
 				lootFactor = lootFactor * (1 + lootFactor) ^ (con.score / expectedScore)
-				playerLoot = monsterType:getBossReward(lootFactor, _ == 1)
+				playerLoot = monsterType:getBossReward(lootFactor, _ == 1, boostedFactor)
 
 				if con.player then
 					for _, p in ipairs(playerLoot) do
@@ -81,7 +83,9 @@ function bossDeath.onDeath(creature, corpse, killer, mostDamageKiller, lastHitUn
 
 			if con.player and con.score ~= 0 then
 				local lootMessage = ("The following items dropped by %s are available in your reward chest: %s"):format(creature:getName(), reward:getContentDescription())
-
+				 if (boostedFactor ~= 1) then
+                    lootMessage = lootMessage .. " (Boss bonus)"
+                end
 				if stamina > 840 then
 					reward:getContentDescription(lootMessage)
 				end

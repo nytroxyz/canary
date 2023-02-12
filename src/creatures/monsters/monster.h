@@ -79,6 +79,9 @@ class Monster final : public Creature
 		RaceType_t getRace() const override {
 			return mType->info.race;
 		}
+		float getMitigation() const override {
+			return mType->info.mitigation;
+		}
 		int32_t getArmor() const override {
 			return mType->info.armor;
 		}
@@ -153,7 +156,7 @@ class Monster final : public Creature
 
 		bool challengeCreature(Creature* creature) override;
 
-		bool changeTargetDistance(int32_t distance);
+		bool changeTargetDistance(int32_t distance, uint32_t duration = 12000);
 
 		CreatureIcon_t getIcon() const override {
 			if (challengeMeleeDuration > 0 && mType->info.targetDistance > targetDistance) {
@@ -257,6 +260,27 @@ class Monster final : public Creature
 		uint16_t getRaceId() const {
 			return mType->info.raceid;
 		}
+		
+		// Hazard system
+		bool isMonsterOnHazardSystem() const {
+			return mType->info.hazardSystemCritChance != 0 || mType->info.canSpawnPod || mType->info.canDodge || mType->info.canDamageBoost;
+		}
+
+		bool getHazardSystemDodge() const {
+			return mType->info.canDodge;
+		}
+
+		bool getHazardSystemSpawnPod() const {
+			return mType->info.canSpawnPod;
+		}
+
+		bool getHazardSystemDamageBoost() const {
+			return mType->info.canDamageBoost;
+		}
+
+		uint16_t getHazardSystemCritChance() const {
+			return mType->info.hazardSystemCritChance;
+		}
 
 		void updateTargetList();
 		void clearTargetList();
@@ -273,7 +297,7 @@ class Monster final : public Creature
 			return getForgeStack() == 0 && !isSummon() && !isRewardBoss() && canDropLoot() && isForgeCreature() && getRaceId() > 0;
 		}
 
-
+		
 		bool isForgeCreature() const {
 			return mType->info.isForgeCreature;
 		}
@@ -383,8 +407,8 @@ class Monster final : public Creature
 		bool isInSpawnRange(const Position& pos) const;
 		bool canWalkTo(Position pos, Direction direction) const;
 
-		static bool pushItem(Item *item, const Direction& nextDirection);
-		static void pushItems(Tile *tile, const Direction& nextDirection);
+		static bool pushItem(Item* item);
+		static void pushItems(Tile* tile);
 		static bool pushCreature(Creature* creature);
 		static void pushCreatures(Tile* tile);
 
@@ -415,11 +439,6 @@ class Monster final : public Creature
 
 		friend class MonsterFunctions;
 		friend class Map;
-
-		static std::vector<std::pair<int8_t, int8_t>> getPushItemLocationOptions(const Direction &direction);
-
-		void doFollowCreature(uint32_t &flags, Direction &nextDirection, bool &result);
-		void doRandomStep(Direction &nextDirection, bool &result);
 };
 
 #endif  // SRC_CREATURES_MONSTERS_MONSTER_H_

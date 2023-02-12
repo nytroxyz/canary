@@ -222,42 +222,30 @@ Item* Player::getWeapon(Slots_t slot, bool ignoreAmmo) const
 		return nullptr;
 	}
 
-	if (!ignoreAmmo && weaponType == WEAPON_DISTANCE) {
-		const ItemType& it = Item::items[item->getID()];
-		if (it.ammoType != AMMO_NONE) {
-			item = getQuiverAmmoOfType(it);
-		}
-	}
-
+  if (!ignoreAmmo && weaponType == WEAPON_DISTANCE) {
+    const ItemType& it = Item::items[item->getID()];
+    if (it.ammoType != AMMO_NONE) {
+      Item* quiver = inventory[CONST_SLOT_RIGHT];
+      if (!quiver || !quiver->isQuiver())
+        return nullptr;
+      Container* container = quiver->getContainer();
+      if (!container)
+        return nullptr;
+      bool found = false;
+      for (Item* ammoItem : container->getItemList()) {
+        if (ammoItem->getAmmoType() == it.ammoType) {
+          if (level >= Item::items[ammoItem->getID()].minReqLevel) {
+            item = ammoItem;
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found)
+        return nullptr;
+    }
+  }
 	return item;
-}
-
-bool Player::hasQuiverEquipped() const {
-	Item* quiver = inventory[CONST_SLOT_RIGHT];
-	return quiver && quiver->isQuiver() && quiver->getContainer();
-}
-
-bool Player::hasWeaponDistanceEquipped() const{
-	const Item* item = inventory[CONST_SLOT_LEFT];
-	return item && item->getWeaponType() == WEAPON_DISTANCE;
-}
-
-Item* Player::getQuiverAmmoOfType(const ItemType &it) const {
-	if (!hasQuiverEquipped()) {
-		return nullptr;
-	}
-
-	Item* quiver = inventory[CONST_SLOT_RIGHT];
-	for (const Container *container = quiver->getContainer();
-		Item* ammoItem : container->getItemList())
-	{
-		if (ammoItem->getAmmoType() == it.ammoType) {
-			if (level >= Item::items[ammoItem->getID()].minReqLevel) {
-				return ammoItem;
-			}
-		}
-	}
-	return nullptr;
 }
 
 Item* Player::getWeapon(bool ignoreAmmo/* = false*/) const
@@ -365,6 +353,63 @@ void Player::getShieldAndWeapon(const Item*& shield, const Item*& weapon) const
 	}
 }
 
+float Player::getMitigation() const
+{
+	int32_t skill = getSkillLevel(SKILL_SHIELD);
+	int32_t defenseValue = 0;
+	const Item* weapon = inventory[CONST_SLOT_LEFT];
+	const Item* shield = inventory[CONST_SLOT_RIGHT];
+
+	float fightFactor = 1.0f;
+	float shieldFactor = 1.0f;
+	float distanceFactor = 1.0f;
+	switch (fightMode) {
+		case FIGHTMODE_ATTACK: {
+			fightFactor = 0.67f;
+			break;
+		}
+		case FIGHTMODE_BALANCED: {
+			fightFactor = 0.84f;
+			break;
+		}
+		case FIGHTMODE_DEFENSE: {
+			fightFactor = 1.0f;
+			break;
+		}
+		default:
+			break;
+	}
+
+	if (shield) {
+		if (shield->isSpellBook() || shield->isQuiver()) {
+			distanceFactor = vocation->mitigationSecondaryShield;
+		} else {
+			shieldFactor = vocation->mitigationPrimaryShield;
+		}
+		defenseValue = shield->getDefense();
+		// Wheel of destiny
+		if (shield->getDefense() > 0) {
+			defenseValue += getWheelOfDestinyMajorStatConditional("Combat Mastery", WHEEL_OF_DESTINY_MAJOR_DEFENSE);
+		}
+	}
+
+	if (weapon) {
+		if (weapon->getAmmoType() == AMMO_BOLT || weapon->getAmmoType() == AMMO_ARROW) {
+			distanceFactor = vocation->mitigationSecondaryShield;
+		} else if (weapon->getSlotPosition() & SLOTP_TWO_HAND) {
+			defenseValue = weapon->getDefense() + weapon->getExtraDefense();
+			shieldFactor = vocation->mitigationSecondaryShield;
+		} else {
+			defenseValue += weapon->getExtraDefense();
+			shieldFactor = vocation->mitigationPrimaryShield;
+		}
+	}
+
+	float mitigation = std::ceil((((((skill * vocation->mitigationFactor) + (shieldFactor * defenseValue))/100.0)) * fightFactor * distanceFactor) * 100.0)/100.0;
+	mitigation += (mitigation * getMitigationMultiplier()) / 100.;
+	return mitigation;
+}
+
 int32_t Player::getDefense() const
 {
 	int32_t defenseSkill = getSkillLevel(SKILL_FIST);
@@ -385,6 +430,10 @@ int32_t Player::getDefense() const
 
 	if (shield) {
 		defenseValue = weapon != nullptr ? shield->getDefense() + weapon->getExtraDefense() : shield->getDefense();
+		// Wheel of destiny
+		if (shield->getDefense() > 0) {
+			defenseValue += getWheelOfDestinyMajorStatConditional("Combat Mastery", WHEEL_OF_DESTINY_MAJOR_DEFENSE);
+		}
 		defenseSkill = getSkillLevel(SKILL_SHIELD);
 	}
 
@@ -474,58 +523,46 @@ void Player::updateInventoryWeight()
 	}
 }
 
-void Player::updateInventoryImbuement()
+void Player::updateInventoryImbuement(bool init /* = false */)
 {
-	// Get the tile the player is currently on
 	const Tile* playerTile = getTile();
-	// Check if the player is in a protection zone
 	bool isInProtectionZone = playerTile && playerTile->hasFlag(TILESTATE_PROTECTIONZONE);
-	// Check if the player is in fight mode
 	bool isInFightMode = hasCondition(CONDITION_INFIGHT);
-	// Iterate through all items in the player's inventory
-	for (auto item : getAllInventoryItems())
-	{
-		// Iterate through all imbuement slots on the item
-
+	
+	uint8_t imbuementsToCheck = g_game().getPlayerActiveImbuements(getID());
+	for (auto item : getAllInventoryItems()) {
 		for (uint8_t slotid = 0; slotid < item->getImbuementSlot(); slotid++)
 		{
 			ImbuementInfo imbuementInfo;
-			// Get the imbuement information for the current slot
 			if (!item->getImbuementInfo(slotid, &imbuementInfo))
 			{
-				// If no imbuement is found, continue to the next slot
-				break;
+				continue;
 			}
 
-			// Imbuement from imbuementInfo, this variable reduces code complexity
-			auto imbuement = imbuementInfo.imbuement;
-			// Get the category of the imbuement
-			const CategoryImbuement* categoryImbuement = g_imbuements().getCategoryByID(imbuement->getCategory());
-			// Parent of the imbued item
-			auto parent = item->getParent();
-			// If the imbuement is aggressive and the player is not in fight mode or is in a protection zone, or the item is in a container, ignore it.
-			if (categoryImbuement && categoryImbuement->agressive) {
-				if (!isInFightMode || isInProtectionZone || parent && parent->getContainer()) {
-					continue;
+			const CategoryImbuement* categoryImbuement = g_imbuements().getCategoryByID(imbuementInfo.imbuement->getCategory());
+			if (categoryImbuement && categoryImbuement->agressive)
+			{
+				if (isInProtectionZone || !isInFightMode)
+				{
+					break;
 				}
 			}
-			// If the item is not in the backpack slot and it's not a agressive imbuement, ignore it.
-			if (categoryImbuement && !categoryImbuement->agressive && parent && parent != this) {
-				continue;
-			}
 
-			// If the imbuement's duration is 0, remove its stats and continue to the next slot
-			if (imbuementInfo.duration == 0)
+			if (init)
 			{
-				removeItemImbuementStats(imbuement);
-				continue;
+				g_game().increasePlayerActiveImbuements(getID());
 			}
 
-			SPDLOG_DEBUG("Decaying imbuement {} from item {} of player {}", imbuement->getName(), item->getName(), getName());
-			// Calculate the new duration of the imbuement, making sure it doesn't go below 0
-			uint64_t duration = std::max<uint64_t>(0, imbuementInfo.duration - EVENT_IMBUEMENT_INTERVAL / 1000);
-			// Update the imbuement's duration in the item
-			item->decayImbuementTime(slotid, imbuement->getID(), duration);
+			int32_t duration = std::max<int32_t>(0, imbuementInfo.duration - EVENT_IMBUEMENT_INTERVAL / 1000);
+			item->decayImbuementTime(slotid, imbuementInfo.imbuement->getID(), duration);
+			if (duration == 0)
+			{
+				removeItemImbuementStats(imbuementInfo.imbuement);
+				g_game().decreasePlayerActiveImbuements(getID());
+				g_game().playerRequestInventoryImbuements(getID());
+			}
+
+			imbuementsToCheck--;
 		}
 	}
 }
@@ -898,9 +935,9 @@ Container* Player::setLootContainer(ObjectCategory_t category, Container* contai
 
 		container->incrementReferenceCounter();
 		if (!loading) {
-			auto flags = container->getAttribute<int64_t>(ItemAttribute_t::QUICKLOOTCONTAINER);
+			int64_t flags = container->getIntAttr(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
 			auto sendAttribute = flags | 1 << category;
-			container->setAttribute(ItemAttribute_t::QUICKLOOTCONTAINER, sendAttribute);
+			container->setIntAttr(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER, sendAttribute);
 		}
 		return previousContainer;
 	} else {
@@ -908,12 +945,12 @@ Container* Player::setLootContainer(ObjectCategory_t category, Container* contai
 			it != quickLootContainers.end() && !loading)
 		{
 			previousContainer = (*it).second;
-			auto flags = previousContainer->getAttribute<int64_t>(ItemAttribute_t::QUICKLOOTCONTAINER);
+			int64_t flags = previousContainer->getIntAttr(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
 			flags &= ~(1 << category);
 			if (flags == 0) {
-				previousContainer->removeAttribute(ItemAttribute_t::QUICKLOOTCONTAINER);
+				previousContainer->removeAttribute(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
 			} else {
-				previousContainer->setAttribute(ItemAttribute_t::QUICKLOOTCONTAINER, flags);
+				previousContainer->setIntAttr(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER, flags);
 			}
 
 			previousContainer->decrementReferenceCounter();
@@ -968,7 +1005,7 @@ void Player::checkLootContainers(const Item* item)
 		if (remove) {
 			shouldSend = true;
 			it = quickLootContainers.erase(it);
-			lootContainer->removeAttribute(ItemAttribute_t::QUICKLOOTCONTAINER);
+			lootContainer->removeAttribute(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
 			lootContainer->decrementReferenceCounter();
 		} else {
 			++it;
@@ -1088,7 +1125,7 @@ Reward* Player::getReward(uint32_t rewardId, bool autoCreate)
 
 	Reward* reward = new Reward();
 	reward->incrementReferenceCounter();
-	reward->setAttribute(ItemAttribute_t::DATE, rewardId);
+	reward->setIntAttr(ITEM_ATTRIBUTE_DATE, rewardId);
 	rewardMap[rewardId] = reward;
 
 	g_game().internalAddItem(getRewardChest(), reward, INDEX_WHEREEVER, FLAG_NOLIMIT);
@@ -1312,6 +1349,7 @@ void Player::onApplyImbuement(Imbuement *imbuement, Item *item, uint8_t slot, bo
 
 	item->addImbuement(slot, imbuement->getID(), baseImbuement->duration);
 	openImbuementWindow(item);
+	updateInventoryImbuement();
 }
 
 void Player::onClearImbuement(Item* item, uint8_t slot)
@@ -1376,7 +1414,7 @@ void Player::sendMarketEnter(uint32_t depotId)
 	if (!client || this->getLastDepotId() == -1 || !depotId) {
 		return;
 	}
-
+	
 	client->sendMarketEnter(depotId);
 }
 
@@ -1600,7 +1638,10 @@ void Player::onChangeZone(ZoneType_t zone)
 		}
 	}
 
+	onThinkWheelOfDestiny(true);
+	sendWheelOfDestinyGiftOfLifeCooldown();
 	g_game().updateCreatureWalkthrough(this);
+	g_game().playerRequestInventoryImbuements(getID());
 	sendIcons();
 	g_events().eventPlayerOnChangeZone(this, zone);
 }
@@ -2007,6 +2048,9 @@ void Player::onThink(uint32_t interval)
 	if (lastStatsTrainingTime != getOfflineTrainingTime() / 60 / 1000) {
 		sendStats();
 	}
+	
+	// Wheel of destiny major spells
+	onThinkWheelOfDestiny();
 }
 
 uint32_t Player::isMuted() const
@@ -2144,13 +2188,18 @@ void Player::addExperience(Creature* target, uint64_t exp, bool sendText/* = fal
 	if (exp == 0) {
 		return;
 	}
+	
+	bool hazard = target && target->getMonster() && target->getMonster()->isMonsterOnHazardSystem() && getHazardSystemPoints() > 0;
+	if (hazard) {
+		exp += (exp * (1.75 * getHazardSystemPoints() * g_configManager().getNumber(HAZARDSYSTEM_EXP_BONUS_MULTIPLIER))) / 100.;
+	}
 
 	experience += exp;
 
 	if (sendText) {
 		std::string expString = fmt::format("{} experience point{}.", exp, (exp != 1 ? "s" : ""));
 
-		TextMessage message(MESSAGE_EXPERIENCE, "You gained " + expString);
+		TextMessage message(MESSAGE_EXPERIENCE, "You gained " + expString + (hazard ? " (Hazard)" : ""));
 		message.position = position;
 		message.primary.value = exp;
 		message.primary.color = TEXTCOLOR_WHITE_EXP;
@@ -2384,6 +2433,9 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
                               bool checkDefense /* = false*/, bool checkArmor /* = false*/, bool field /* = false*/)
 {
 	BlockType_t blockType = Creature::blockHit(attacker, combatType, damage, checkDefense, checkArmor, field);
+	
+	bool isReflected = false;
+	CombatDamage reflectDamage;
 
 	if (attacker) {
 		sendCreatureSquare(attacker, SQ_COLOR_BLACK);
@@ -2407,9 +2459,10 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
 			const ItemType& it = Item::items[item->getID()];
 			if (it.abilities) {
 				const int16_t& absorbPercent = it.abilities->absorbPercent[combatTypeToIndex(combatType)];
-				auto charges = item->getAttribute<uint16_t>(ItemAttribute_t::CHARGES);
 				if (absorbPercent != 0) {
 					damage -= std::round(damage * (absorbPercent / 100.));
+
+					uint16_t charges = item->getCharges();
 					if (charges != 0) {
 						g_game().transformItem(item, item->getID(), charges - 1);
 					}
@@ -2419,6 +2472,8 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
 					const int16_t& fieldAbsorbPercent = it.abilities->fieldAbsorbPercent[combatTypeToIndex(combatType)];
 					if (fieldAbsorbPercent != 0) {
 						damage -= std::round(damage * (fieldAbsorbPercent / 100.));
+
+						uint16_t charges = item->getCharges();
 						if (charges != 0) {
 							g_game().transformItem(item, item->getID(), charges - 1);
 						}
@@ -2437,6 +2492,23 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
 						reflectDamage.primary.value = std::round(-damage * (reflectPercent / 100.));
 
 						Combat::doCombatHealth(this, attacker, reflectDamage, params);
+					}
+					if (combatType == COMBAT_PHYSICALDAMAGE) {
+						if (it.abilities->damageReflection != 0) {
+							const int16_t calculatedDamage = std::round(attacker->getMaxHealth() * 0.01);
+
+							if (calculatedDamage >= it.abilities->damageReflection) {
+								reflectDamage.primary.value += it.abilities->damageReflection;
+							} else { 
+								reflectDamage.primary.value += calculatedDamage;
+							}
+
+							if (reflectDamage.primary.value > std::round(attacker->getMaxHealth() * 0.01) || reflectDamage.primary.value >= it.abilities->damageReflection) {
+								reflectDamage.primary.value = it.abilities->damageReflection;
+							}
+
+							isReflected = true;
+						}
 					}
 				}
 			}
@@ -2457,7 +2529,26 @@ BlockType_t Player::blockHit(Creature* attacker, CombatType_t combatType, int32_
 			}
 
 		}
+		
+		// Wheel of destiny
+		int32_t wheelOfDestinyElementAbsorb = getWheelOfDestinyResistance(combatType);
+		if (wheelOfDestinyElementAbsorb > 0) {
+			damage -= std::ceil((damage * wheelOfDestinyElementAbsorb) / 10000.);
+		}
 
+		damage -= std::ceil((damage * checkWheelOfDestinyAvatarSkill(WHEEL_OF_DESTINY_AVATAR_SKILL_DAMAGE_REDUCTION)) / 100.);
+
+		if (isReflected) {
+			CombatParams params;
+			params.combatType = COMBAT_PHYSICALDAMAGE;
+			params.impactEffect = CONST_ME_HITAREA;
+
+			reflectDamage.origin = ORIGIN_REFLECT;
+			reflectDamage.primary.type = COMBAT_PHYSICALDAMAGE;
+
+			Combat::doCombatHealth(this, attacker, reflectDamage, params);
+		}
+		
 		if (damage <= 0) {
 			damage = 0;
 			blockType = BLOCK_ARMOR;
@@ -2499,7 +2590,7 @@ void Player::death(Creature* lastHitCreature)
 			}
 		}
 		bool pvpDeath = false;
-		if (playerDmg > 0 || othersDmg > 0){
+		if(playerDmg > 0 || othersDmg > 0){
 			pvpDeath = (Player::lastHitIsPlayer(lastHitCreature) || playerDmg / (playerDmg + static_cast<double>(othersDmg)) >= 0.05);
 		}
 		if (pvpDeath && sumLevels > level) {
@@ -2706,7 +2797,7 @@ bool Player::spawn()
 	}
 
 	SpectatorHashSet spectators;
-	g_game().map.getSpectators(spectators, position, true);
+	g_game().map.getSpectators(spectators, position, false, true);
 	for (Creature* spectator : spectators) {
 		if (!spectator) {
 			continue;
@@ -2764,6 +2855,9 @@ void Player::despawn()
 		}
 
 		spectator->onRemoveCreature(this, false);
+		// Remove player from spectator target list
+		spectator->setAttackedCreature(nullptr);
+		spectator->setFollowCreature(nullptr);
 	}
 
 	tile->removeCreature(this);
@@ -2801,13 +2895,35 @@ Item* Player::getCorpse(Creature* lastHitCreature, Creature* mostDamageCreature)
 			ss << "You recognize " << getNameDescription() << '.';
 		}
 
-		corpse->setAttribute(ItemAttribute_t::DESCRIPTION, ss.str());
+		corpse->setSpecialDescription(ss.str());
 	}
 	return corpse;
 }
 
 void Player::addInFightTicks(bool pzlock /*= false*/)
 {
+	// Wheel of destiny
+	bool reloadClient = false;
+	if (getWheelOfDestinyInstant("Battle Instinct") && getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BATTLE_INSTINCT) < OTSYS_TIME()) {
+		if (checkWheelOfDestinyBattleInstinct()) {
+			reloadClient = true;
+		}
+	}
+	if (getWheelOfDestinyInstant("Positional Tatics") && getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_POSITIONAL_TATICS) < OTSYS_TIME()) {
+		if (checkWheelOfDestinyPositionalTatics()) {
+			reloadClient = true;
+		}
+	}
+	if (getWheelOfDestinyInstant("Ballistic Mastery") && getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BALLISTIC_MASTERY) < OTSYS_TIME()) {
+		if (checkWheelOfDestinyBallisticMastery()) {
+			reloadClient = true;
+		}
+	}
+	if (reloadClient) {
+		sendSkills();
+		sendStats();
+		//g_game().reloadCreature(this);
+	}
 	if (hasFlag(PlayerFlags_t::NotGainInFight)) {
 		return;
 	}
@@ -3570,7 +3686,7 @@ void Player::stashContainer(StashContainerList itemDict)
 	}
 
 	for (auto it : stashItems) {
-		if (!stashItemDict[it.first]) {
+		if(!stashItemDict[it.first]) {
 			stashItemDict[it.first] = it.second;
 		} else {
 			stashItemDict[it.first] += it.second;
@@ -3726,76 +3842,6 @@ std::vector<Item*> Player::getInventoryItemsFromId(uint16_t itemId, bool ignore 
 	return itemVector;
 }
 
-std::array<double_t, COMBAT_COUNT> Player::getFinalDamageReduction() const
-{
-	std::array<double_t, COMBAT_COUNT> combatReductionArray;
-	combatReductionArray.fill(0);
-	calculateDamageReductionFromEquipedItems(combatReductionArray);
-	for (int combatTypeIndex = 0; combatTypeIndex < COMBAT_COUNT; combatTypeIndex++) {
-		combatReductionArray[combatTypeIndex] = std::clamp<double_t>(
-			std::floor(combatReductionArray[combatTypeIndex]),
-			-100.,
-			100.
-		);
-	}
-	return combatReductionArray;
-}
-
-void Player::calculateDamageReductionFromEquipedItems(std::array<double_t, COMBAT_COUNT> &combatReductionArray) const
-{
-	for (uint8_t slot = CONST_SLOT_FIRST; slot <= CONST_SLOT_LAST; ++slot) {
-		Item *item = inventory[slot];
-		if (item) {
-			calculateDamageReductionFromItem(combatReductionArray, item);
-		}
-	}
-}
-
-void Player::calculateDamageReductionFromItem(std::array<double_t, COMBAT_COUNT> &combatReductionArray, Item *item) const
-{
-	for (uint16_t combatTypeIndex = 0; combatTypeIndex < COMBAT_COUNT; combatTypeIndex++) {
-		updateDamageReductionFromItemImbuement(combatReductionArray, item, combatTypeIndex);
-		updateDamageReductionFromItemAbility(combatReductionArray, item, combatTypeIndex);
-	}
-}
-
-void Player::updateDamageReductionFromItemImbuement(
-	std::array<double_t, COMBAT_COUNT> &combatReductionArray, Item *item, uint16_t combatTypeIndex
-) const
-{
-	for (uint8_t imbueSlotId = 0; imbueSlotId < item->getImbuementSlot(); imbueSlotId++) {
-		ImbuementInfo imbuementInfo;
-		if (item->getImbuementInfo(imbueSlotId, &imbuementInfo) && imbuementInfo.imbuement) {
-			int16_t imbuementAbsorption = imbuementInfo.imbuement->absorbPercent[combatTypeIndex];
-			if (imbuementAbsorption != 0) {
-				combatReductionArray[combatTypeIndex] = calculateDamageReduction(combatReductionArray[combatTypeIndex], imbuementAbsorption);
-			}
-		}
-	}
-}
-
-void Player::updateDamageReductionFromItemAbility(
-	std::array<double_t, COMBAT_COUNT> &combatReductionArray, const Item *item, uint16_t combatTypeIndex
-) const
-{
-	if (!item) {
-		return;
-	}
-
-	const ItemType &itemType = Item::items[item->getID()];
-	if (itemType.abilities) {
-		int16_t elementReduction = itemType.abilities->absorbPercent[combatTypeIndex];
-		if (elementReduction != 0) {
-			combatReductionArray[combatTypeIndex] = calculateDamageReduction(combatReductionArray[combatTypeIndex], elementReduction);
-		}
-	}
-}
-
-double_t Player::calculateDamageReduction(double_t currentTotal, int16_t resistance) const
-{
-	return (100 - currentTotal) / 100.0 * resistance + currentTotal;
-}
-
 std::vector<Item*> Player::getAllInventoryItems(bool ignoreEquiped /*= false*/) const
 {
 	std::vector<Item*> itemVector;
@@ -3822,7 +3868,7 @@ std::vector<Item*> Player::getAllInventoryItems(bool ignoreEquiped /*= false*/) 
 
 std::map<uint32_t, uint32_t>& Player::getAllItemTypeCount(std::map<uint32_t, uint32_t>& countMap) const
 {
-	for (const auto item : getAllInventoryItems()) {
+	for (auto item : getAllInventoryItems()) {
 		countMap[static_cast<uint32_t>(item->getID())] += Item::countByType(item, -1);
 	}
 	return countMap;
@@ -3830,7 +3876,7 @@ std::map<uint32_t, uint32_t>& Player::getAllItemTypeCount(std::map<uint32_t, uin
 
 std::map<uint16_t, uint16_t>& Player::getAllSaleItemIdAndCount(std::map<uint16_t, uint16_t> &countMap) const
 {
-	for (const auto item : getAllInventoryItems()) {
+	for (auto item : getAllInventoryItems()) {
 		if (item->getTier() > 0) {
 			continue;
 		}
@@ -3845,10 +3891,10 @@ std::map<uint16_t, uint16_t>& Player::getAllSaleItemIdAndCount(std::map<uint16_t
 
 void Player::getAllItemTypeCountAndSubtype(std::map<uint32_t, uint32_t>& countMap) const
 {
-	for (const auto item : getAllInventoryItems()) {
+	for (auto item : getAllInventoryItems()) {
 		uint16_t itemId = item->getID();
 		if (Item::items[itemId].isFluidContainer()) {
-			countMap[static_cast<uint32_t>(itemId) | (item->getAttribute<uint32_t>(ItemAttribute_t::FLUIDTYPE)) << 16] += item->getItemCount();
+			countMap[static_cast<uint32_t>(itemId) | (static_cast<uint32_t>(item->getFluidType()) << 16)] += item->getItemCount();
 		} else {
 			countMap[static_cast<uint32_t>(itemId)] += item->getItemCount();
 		}
@@ -4133,8 +4179,6 @@ void Player::doAttacking(uint32_t)
 			} else {
 				result = weapon->useWeapon(this, tool, attackedCreature);
 			}
-		} else if (hasWeaponDistanceEquipped()) {
-			return;
 		} else {
 			result = Weapon::useFist(this, attackedCreature);
 		}
@@ -5256,33 +5300,6 @@ void Player::setCurrentMount(uint8_t mount)
 	addStorageValue(PSTRG_MOUNTS_CURRENTMOUNT, mount);
 }
 
-bool Player::hasAnyMount() const
-{
-	for (const auto& mounts = g_game().mounts.getMounts();
-		const Mount& mount : mounts) {
-		if (hasMount(&mount)) {
-			return true;
-		}
-	}
-	return false;
-}
-
-uint8_t Player::getRandomMountId() const
-{
-	std::vector<uint8_t> playerMounts;
-
-	for (const auto& mounts = g_game().mounts.getMounts();
-		const Mount& mount : mounts) {
-		if (hasMount(&mount)) {
-			playerMounts.push_back(mount.id);
-		}
-	}
-
-	auto playerMountsSize = static_cast<int32_t>(playerMounts.size() - 1);
-	auto randomIndex = uniform_random(0, std::max<int32_t>(0, playerMountsSize));
-	return playerMounts.at(randomIndex);
-}
-
 bool Player::toggleMount(bool mount)
 {
 	if ((OTSYS_TIME() - lastToggleMount) < 3000 && !wasMounted) {
@@ -5311,10 +5328,6 @@ bool Player::toggleMount(bool mount)
 			return false;
 		}
 
-		if (isRandomMounted()) {
-			currentMountId = getRandomMountId();
-		}
-
 		const Mount* currentMount = g_game().mounts.getMountByID(currentMountId);
 		if (!currentMount) {
 			return false;
@@ -5337,7 +5350,6 @@ bool Player::toggleMount(bool mount)
 		}
 
 		defaultOutfit.lookMount = currentMount->clientId;
-		setCurrentMount(currentMount->id);
 
 		if (currentMount->speed != 0) {
 			g_game().changeSpeed(this, currentMount->speed);
@@ -5996,14 +6008,14 @@ void Player::openPlayerContainers()
 
 		Container* itemContainer = item->getContainer();
 		if (itemContainer) {
-			auto cid = item->getAttribute<int64_t>(ItemAttribute_t::OPENCONTAINER);
+			int64_t cid = item->getIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER);
 			if (cid > 0) {
 				openContainersList.emplace_back(std::make_pair(cid, itemContainer));
 			}
 			for (ContainerIterator it = itemContainer->iterator(); it.hasNext(); it.advance()) {
 				Container* subContainer = (*it)->getContainer();
 				if (subContainer) {
-					auto subcid = (*it)->getAttribute<uint8_t>(ItemAttribute_t::OPENCONTAINER);
+					uint8_t subcid = (*it)->getIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER);
 					if (subcid > 0) {
 						openContainersList.emplace_back(std::make_pair(subcid, subContainer));
 					}
@@ -6084,7 +6096,7 @@ std::string Player::getBlessingsName() const
 	std::ostringstream os;
 	for (uint8_t i = 1; i <= 8; i++) {
 		if (hasBlessing(i)) {
-			if (auto blessName = BlessingNames.find(static_cast<Blessings_t>(i));
+			if (auto blessName = BlessingNames.find(static_cast<Blessings_t>(i)); 
 			blessName != BlessingNames.end()) {
 				os << (*blessName).second;
 			} else {
@@ -6133,7 +6145,7 @@ void Player::triggerMomentum() {
 			triggered = true;
 			if (type == CONDITION_SPELLCOOLDOWN || (type == CONDITION_SPELLGROUPCOOLDOWN && spellId > SPELLGROUP_SUPPORT)) {
 				condItem->setTicks(newTicks);
-				type == CONDITION_SPELLGROUPCOOLDOWN ? sendSpellGroupCooldown(static_cast<SpellGroup_t>(spellId), newTicks) : sendSpellCooldown(static_cast<uint8_t>(spellId), newTicks);
+				type == CONDITION_SPELLGROUPCOOLDOWN ? sendSpellGroupCooldown(static_cast<SpellGroup_t>(spellId), newTicks) : sendSpellCooldown(static_cast<uint16_t>(spellId), newTicks);
 			}
 			++it;
 		}
@@ -6508,6 +6520,216 @@ bool Player::saySpell(
 		}
 	}
 	return true;
+}
+
+/*******************************************************************************
+ * Hazard system
+ ******************************************************************************/
+
+void Player::addHazardSystemPoints(int32_t amount) {
+	addStorageValue(STORAGEVALUE_HAZARDCOUNT, std::max<int32_t>(0, std::min<int32_t>(0xFFFF, static_cast<int32_t>(getHazardSystemPoints()) + amount)), true);
+	reloadHazardSystemPointsCounter = true;
+	if (hazardSystemReferenceCounter > 0) {
+		Tile* tile = getTile();
+		if (!tile) {
+			return;
+		}
+
+		SpectatorHashSet spectators;
+		g_game().map.getSpectators(spectators, tile->getPosition(), true);
+		for (Creature* spectator : spectators) {
+			if (!spectator || spectator == this) {
+				continue;
+			}
+
+			Player* player = spectator->getPlayer();
+			if (player && player->getProtocolVersion() >= 1289) {
+				player->sendCreatureIcon(getPlayer());
+			}
+		}
+
+		if (client && getProtocolVersion() >= 1289) {
+			client->reloadHazardSystemIcon(hazardSystemReferenceCounter);
+		}
+	}
+}
+
+void Player::parseAttackRecvHazardSystem(CombatDamage& damage, const Monster* monster)
+{
+	if (!monster || !monster->isMonsterOnHazardSystem()) {
+		return;
+	}
+
+	if (!g_configManager().getBoolean(HAZARDSYSTEM_ENABLED)) {
+		return;
+	}
+
+	if (damage.primary.type == COMBAT_HEALING) {
+		return;
+	}
+
+	double points = static_cast<double>(getHazardSystemPoints());
+	if (party) {
+		for (Player* partyMember : party->getMembers()) {
+			if (partyMember && partyMember->getHazardSystemPoints() < points) {
+				points = static_cast<double>(partyMember->getHazardSystemPoints());
+			}
+		}
+
+		if (party->getLeader() && party->getLeader()->getHazardSystemPoints() < points) {
+			points = static_cast<double>(party->getLeader()->getHazardSystemPoints());
+		}
+	}
+
+	if (points == 0) {
+		return;
+	}
+
+	double stage = 0;
+	uint16_t chance = static_cast<uint16_t>(normal_random(1, 10000));
+
+	// Critical chance
+	if ((lastHazardSystemCriticalHit + g_configManager().getNumber(HAZARDSYSTEM_CRITICAL_INTERVAL)) <= OTSYS_TIME() && chance <= monster->getHazardSystemCritChance() && !damage.critical) {
+		damage.critical = true;
+		damage.extension = true;
+		damage.exString = "(Hazard)";
+
+		stage = (points - 1) * static_cast<double>(g_configManager().getNumber(HAZARDSYSTEM_CRITICAL_MULTIPLIER));
+		damage.primary.value += static_cast<int32_t>(std::ceil((static_cast<double>(damage.primary.value) * (5000 + stage)) / 10000));
+		damage.secondary.value += static_cast<int32_t>(std::ceil((static_cast<double>(damage.secondary.value) * (5000 + stage)) / 10000));
+		lastHazardSystemCriticalHit = OTSYS_TIME();
+	}
+
+	// To prevent from punish the player twice with critical + damage boost, just remove the /* */ from the if
+	if (monster->getHazardSystemDamageBoost()/* && !damage.critical*/) {
+		stage = points * static_cast<double>(g_configManager().getNumber(HAZARDSYSTEM_DAMAGE_MULTIPLIER));
+		if (stage != 0) {
+			damage.extension = true;
+			damage.exString = "(Hazard)";
+			damage.primary.value += static_cast<int32_t>(std::ceil(((static_cast<double>(damage.primary.value) * stage) / 10000)));
+			if (damage.secondary.value != 0) {
+				damage.secondary.value += static_cast<int32_t>(std::ceil((static_cast<double>(damage.secondary.value) * stage) / 10000));
+			}
+		}
+	}
+
+}
+
+void Player::parseAttackDealtHazardSystem(CombatDamage& damage, const Monster* monster)
+{
+	if (!g_configManager().getBoolean(HAZARDSYSTEM_ENABLED)) {
+		return;
+	}
+
+	if (!monster || !monster->isMonsterOnHazardSystem()) {
+		return;
+	}
+
+	if (damage.primary.type == COMBAT_HEALING) {
+		return;
+	}
+
+	double points = static_cast<double>(getHazardSystemPoints());
+	if (party) {
+		for (Player* partyMember : party->getMembers()) {
+			if (partyMember && partyMember->getHazardSystemPoints() < points) {
+				points = static_cast<double>(partyMember->getHazardSystemPoints());
+			}
+		}
+
+		if (party->getLeader() && party->getLeader()->getHazardSystemPoints() < points) {
+			points = static_cast<double>(party->getLeader()->getHazardSystemPoints());
+		}
+	}
+
+	if (points == 0) {
+		return;
+	}
+
+	uint16_t stage = 0;
+	uint16_t chance = static_cast<uint16_t>(normal_random(1, 10000));
+
+	// Dodge chance
+	if (monster->getHazardSystemDodge()) {
+		stage = points * g_configManager().getNumber(HAZARDSYSTEM_DODGE_MULTIPLIER);
+		if (chance <= stage) {
+			damage.primary.value = 0;
+			damage.secondary.value = 0;
+			return;
+		}
+	}
+}
+
+void Player::reloadHazardSystemIcon()
+{
+	if (reloadHazardSystemPointsCounter) {
+		reloadHazardSystemPointsCounter = false;
+		if (getHazardSystemPoints() > 0) {
+			Tile* tile = getTile();
+			if (!tile) {
+				return;
+			}
+
+			SpectatorHashSet spectators;
+			g_game().map.getSpectators(spectators, tile->getPosition(), true);
+			for (Creature* spectator : spectators) {
+				if (!spectator || spectator == this) {
+					continue;
+				}
+
+				Player* player = spectator->getPlayer();
+				if (player && player->getProtocolVersion() >= 1289) {
+					player->sendCreatureIcon(getPlayer());
+				}
+			}
+		}
+		if (client && getProtocolVersion() >= 1289) {
+			client->reloadHazardSystemIcon(hazardSystemReferenceCounter);
+		}
+	}
+}
+
+void Player::incrementeHazardSystemReference()
+{
+	hazardSystemReferenceCounter++;
+	if (hazardSystemReferenceCounter != 0) {
+		reloadHazardSystemIcon();
+	}
+}
+
+void Player::decrementeHazardSystemReference()
+{
+	if (hazardSystemReferenceCounter == 0) {
+		return;
+	}
+
+	hazardSystemReferenceCounter--;
+	if (hazardSystemReferenceCounter == 0) {
+		if (getHazardSystemPoints() > 0) {
+			Tile* tile = getTile();
+			if (!tile) {
+				return;
+			}
+
+			SpectatorHashSet spectators;
+			g_game().map.getSpectators(spectators, tile->getPosition(), true);
+			for (Creature* spectator : spectators) {
+				if (!spectator || spectator == this) {
+					continue;
+				}
+
+				Player* player = spectator->getPlayer();
+				if (player) {
+					player->sendCreatureIcon(getPlayer());
+				}
+			}
+		}
+
+		if (client) {
+		    client->reloadHazardSystemIcon(hazardSystemReferenceCounter);
+		}
+		reloadHazardSystemPointsCounter = true;
+	}
 }
 
 // Forge system
@@ -7121,6 +7343,537 @@ void Player::registerForgeHistoryDescription(ForgeHistory history)
 	history.description = detailsResponse.str();
 
 	setForgeHistory(history);
+}
+
+// Wheel of destiny
+bool Player::checkWheelOfDestinyBattleInstinct()
+{
+	setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BATTLE_INSTINCT, OTSYS_TIME() + 2000);
+	bool updateClient = false;
+	wheelOfDestinyCreaturesNearby = 0;
+	uint16_t creaturesNearby = 0;
+	for (int offsetX = -1; offsetX <= 1; offsetX++) {
+		if (creaturesNearby >= 8) {
+			break;
+		}
+		for (int offsetY = -1; offsetY <= 1; offsetY++) {
+			if (creaturesNearby >= 8) {
+				break;
+			}
+			Tile* tile = g_game().map.getTile(getPosition().x + offsetX, getPosition().y + offsetY, getPosition().z);
+			if (!tile) {
+				continue;
+			}
+
+			const Creature* creature = tile->getTopVisibleCreature(this);
+			if (!creature || creature == this || (creature->getMaster() && creature->getMaster()->getPlayer() == this)) {
+				continue;
+			}
+
+			creaturesNearby++;
+		}
+	}
+
+	if (creaturesNearby >= 5) {
+		wheelOfDestinyCreaturesNearby = creaturesNearby;
+		creaturesNearby -= 4;
+		uint16_t meleeSkill = 1 * creaturesNearby;
+		uint16_t shieldSkill = 6 * creaturesNearby;
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MELEE) != meleeSkill || getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_SHIELD) != shieldSkill) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MELEE, meleeSkill);
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_SHIELD, shieldSkill);
+			updateClient = true;
+		}
+	} else if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MELEE) != 0 || getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_SHIELD) != 0) {
+		setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MELEE, 0);
+		setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_SHIELD, 0);
+		updateClient = true;
+	}
+
+	return updateClient;
+}
+
+bool Player::checkWheelOfDestinyPositionalTatics()
+{
+	setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_POSITIONAL_TATICS, OTSYS_TIME() + 2000);
+	wheelOfDestinyCreaturesNearby = 0;
+	bool updateClient = false;
+	uint16_t creaturesNearby = 0;
+	for (int offsetX = -1; offsetX <= 1; offsetX++) {
+		if (creaturesNearby > 0) {
+			break;
+		}
+		for (int offsetY = -1; offsetY <= 1; offsetY++) {
+			Tile* tile = g_game().map.getTile(getPosition().x + offsetX, getPosition().y + offsetY, getPosition().z);
+			if (!tile) {
+				continue;
+			}
+
+			const Creature* creature = tile->getTopVisibleCreature(this);
+			if (!creature || creature == this || !creature->getMonster() || (creature->getMaster() && creature->getMaster()->getPlayer())) {
+				continue;
+			}
+
+			creaturesNearby++;
+			break;
+		}
+	}
+	uint16_t magicSkill = 3;
+	uint16_t distanceSkill = 3;
+	if (creaturesNearby == 0) {
+		wheelOfDestinyCreaturesNearby = creaturesNearby;
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DISTANCE) != distanceSkill) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DISTANCE, distanceSkill);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MAGIC) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MAGIC, 0);
+			updateClient = true;
+		}
+	} else {
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DISTANCE) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DISTANCE, 0);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MAGIC) != magicSkill) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_MAGIC, magicSkill);
+			updateClient = true;
+		}
+	}
+
+	return updateClient;
+}
+
+bool Player::checkWheelOfDestinyBallisticMastery()
+{
+	setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BALLISTIC_MASTERY, OTSYS_TIME() + 2000);
+	bool updateClient = false;
+	Item* item = getWeapon();
+	uint16_t newCritical = 10;
+	uint16_t newHolyBonus = 2; // 2%
+	uint16_t newPhysicalBonus = 2; // 2%
+	if (item && item->getAmmoType() == AMMO_BOLT) {
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG) != newCritical) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG, newCritical);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG) != 0 || getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG, 0);
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG, 0);
+			updateClient = true;
+		}
+	} else if (item && item->getAmmoType() == AMMO_ARROW) {
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG, 0);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG) != newPhysicalBonus || getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG) != newHolyBonus) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG, newPhysicalBonus);
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG, newHolyBonus);
+			updateClient = true;
+		}
+	} else {
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG, 0);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG) != 0 || getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_PHYSICAL_DMG, 0);
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_HOLY_DMG, 0);
+			updateClient = true;
+		}
+	}
+
+	return updateClient;
+}
+
+bool Player::checkWheelOfDestinyCombatMastery()
+{
+	setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_COMBAT_MASTERY, OTSYS_TIME() + 2000);
+	bool updateClient = false;
+	Item* item = getWeapon();
+	uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_COMBAT_MASTERY);
+	if (item && item->getSlotPosition() & SLOTP_TWO_HAND) {
+		int32_t criticalSkill = 0;
+		if (stage >= 3) {
+			criticalSkill = 12;
+		} else if (stage >= 2) {
+			criticalSkill = 8;
+		} else if (stage >= 1) {
+			criticalSkill = 4;
+		}
+
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG_2) != criticalSkill) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG_2, criticalSkill);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DEFENSE) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DEFENSE, 0);
+			updateClient = true;
+		}
+	} else {
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG_2) != 0) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_CRITICAL_DMG_2, 0);
+			updateClient = true;
+		}
+		if (getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DEFENSE) == 0) {
+			int32_t shieldSkill = 0;
+			if (stage >= 3) {
+				shieldSkill = 30;
+			} else if (stage >= 2) {
+				shieldSkill = 20;
+			} else if (stage >= 1) {
+				shieldSkill = 10;
+			}
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DEFENSE, shieldSkill);
+			updateClient = true;
+		}
+	}
+
+	return updateClient;
+}
+
+bool Player::checkWheelOfDestinyDivineEmpowerment()
+{
+	bool updateClient = false;
+	setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_DIVINE_EMPOWERMENT, OTSYS_TIME() + 2000);
+	Tile* tile = getTile();
+	if (tile && tile->getItemTypeCount(ITEM_DIVINE_EMPOWERMENT_WOD) > 0) {
+		int32_t damageBonus = 0;
+		uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_DIVINE_EMPOWERMENT);
+		if (stage >= 3) {
+			damageBonus = 12;
+		} else if (stage >= 2) {
+			damageBonus = 10;
+		} else if (stage >= 1) {
+			damageBonus = 8;
+		}
+
+		if (damageBonus != getWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DAMAGE)) {
+			setWheelOfDestinyMajorStat(WHEEL_OF_DESTINY_MAJOR_DAMAGE, damageBonus);
+			updateClient = true;
+		}
+	}
+
+	return updateClient;
+}
+
+void Player::checkWheelOfDestinyGiftOfLife()
+{
+	// Healing
+	CombatDamage giftDamage;
+	giftDamage.primary.value = (getMaxHealth() * getWheelOfDestinyGiftOfLifeHeal()) / 100;
+	giftDamage.primary.type = COMBAT_HEALING;
+	sendTextMessage(MESSAGE_EVENT_ADVANCE, "That was close! Fortunately, your were saved by the Gift of Life.");
+	g_game().addMagicEffect(getPosition(), CONST_ME_WATER_DROP);
+	g_game().combatChangeHealth(this, this, giftDamage);
+	// Condition cooldown reduction
+	uint16_t reductionTimer = 60000;
+	reduceAllSpellsCooldownTimer(reductionTimer);
+
+	// Set cooldown
+	setWheelOfDestinyGiftOfCooldown(getWheelOfDestinyGiftOfLifeTotalCooldown(), false);
+	sendWheelOfDestinyGiftOfLifeCooldown();
+}
+
+int32_t Player::checkWheelOfDestinyBlessingGroveHealingByTarget(Creature* target)
+{
+	if (!target || target == this) {
+		return 0;
+	}
+
+	int32_t healingBonus = 0;
+	uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_BLESSING_OF_THE_GROVE);
+	int32_t healthPercent = std::round((static_cast<double>(target->getHealth()) * 100)/static_cast<double>(target->getMaxHealth()));
+	if (healthPercent <= 30) {
+		if (stage >= 3) {
+			healingBonus = 24;
+		} else if (stage >= 2) {
+			healingBonus = 18;
+		} else if (stage >= 1) {
+			healingBonus = 12;
+		}
+	} else if (healthPercent <= 60) {
+		if (stage >= 3) {
+			healingBonus = 12;
+		} else if (stage >= 2) {
+			healingBonus = 9;
+		} else if (stage >= 1) {
+			healingBonus = 6;
+		}
+	}
+
+	return healingBonus;
+}
+
+int32_t Player::checkWheelOfDestinyTwinBurstByTarget(Creature* target)
+{
+	if (!target || target == this) {
+		return 0;
+	}
+
+	int32_t damageBonus = 0;
+	uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_TWIN_BURST);
+	int32_t healthPercent = std::round((static_cast<double>(target->getHealth()) * 100)/static_cast<double>(target->getMaxHealth()));
+	if (healthPercent > 60) {
+		if (stage >= 3) {
+			damageBonus = 60;
+		} else if (stage >= 2) {
+			damageBonus = 40;
+		} else if (stage >= 1) {
+			damageBonus = 20;
+		}
+	}
+
+	return damageBonus;
+}
+
+int32_t Player::checkWheelOfDestinyExecutionersThrow(Creature* target)
+{
+	if (!target || target == this) {
+		return 0;
+	}
+
+	int32_t damageBonus = 0;
+	uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_EXECUTIONERS_THROW);
+	int32_t healthPercent = std::round((static_cast<double>(target->getHealth()) * 100)/static_cast<double>(target->getMaxHealth()));
+	if (healthPercent <= 30) {
+		if (stage >= 3) {
+			damageBonus = 150;
+		} else if (stage >= 2) {
+			damageBonus = 125;
+		} else if (stage >= 1) {
+			damageBonus = 100;
+		}
+	}
+
+	return damageBonus;
+}
+
+int32_t Player::checkWheelOfDestinyBeamMasteryDamage()
+{
+	int32_t damageBoost = 0;
+	uint8_t stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_BEAM_MASTERY);
+	if (stage >= 3) {
+		damageBoost = 14;
+	} else if (stage >= 2) {
+		damageBoost = 12;
+	} else if (stage >= 1) {
+		damageBoost = 10;
+	}
+
+	return damageBoost;
+}
+
+int32_t Player::checkWheelOfDestinyDrainBodyLeech(Creature* target, skills_t skill)
+{
+	if (!target || !target->getMonster() || target->getWheelOfDestinyDrainBodyDebuff() == 0) {
+		return 0;
+	}
+
+	uint8_t stage = target->getWheelOfDestinyDrainBodyDebuff();
+	if (target->getBuff(BUFF_DAMAGERECEIVED) > 100) {
+		if (skill == SKILL_MANA_LEECH_AMOUNT) {
+			int32_t manaLeechSkill = 0;
+			if (stage >= 3) {
+				manaLeechSkill = 300;
+			} else if (stage >= 2) {
+				manaLeechSkill = 200;
+			} else if (stage >= 1) {
+				manaLeechSkill = 100;
+			}
+			return manaLeechSkill;
+		} else if (skill == SKILL_MANA_LEECH_CHANCE) {
+			return 100;
+		}
+	}
+
+	if (target->getBuff(BUFF_DAMAGEDEALT) < 100) {
+		if (skill == SKILL_LIFE_LEECH_AMOUNT) {
+			int32_t lifeLeechSkill = 0;
+			if (stage >= 3) {
+				lifeLeechSkill = 500;
+			} else if (stage >= 2) {
+				lifeLeechSkill = 400;
+			} else if (stage >= 1) {
+				lifeLeechSkill = 300;
+			}
+			return lifeLeechSkill;
+		} else if (skill == SKILL_LIFE_LEECH_CHANCE) {
+			return 100;
+		}
+	}
+
+	return 0;
+}
+
+int32_t Player::checkWheelOfDestinyBattleHealingAmount()
+{
+	int32_t amount = getSkillLevel(SKILL_SHIELD) * 0.2;
+	uint8_t healthPercent = (getHealth() * 100) / getMaxHealth();
+	if (healthPercent <= 30) {
+		amount *= 3;
+	} else if (healthPercent <= 60) {
+		amount *= 2;
+	}
+	return amount;
+}
+
+int32_t Player::checkWheelOfDestinyAvatarSkill(WheelOfDestinyAvatarSkill_t skill) const
+{
+	if (skill == WHEEL_OF_DESTINY_AVATAR_SKILL_NONE || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_AVATAR) <= OTSYS_TIME()) {
+		return 0;
+	}
+
+	uint8_t stage = 0;
+	if (getWheelOfDestinyInstant("Avatar of Light")) {
+		stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_AVATAR_OF_LIGHT);
+	} else if (getWheelOfDestinyInstant("Avatar of Steel")) {
+		stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_AVATAR_OF_STEEL);
+	} else if (getWheelOfDestinyInstant("Avatar of Nature")) {
+		stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_AVATAR_OF_NATURE);
+	} else if (getWheelOfDestinyInstant("Avatar of Storm")) {
+		stage = getWheelOfDestinyStage(WHEEL_OF_DESTINY_STAGE_AVATAR_OF_STORM);
+	} else {
+		return 0;
+	}
+
+	if (skill == WHEEL_OF_DESTINY_AVATAR_SKILL_DAMAGE_REDUCTION) {
+		if (stage >= 3) {
+			return 15;
+		} else if (stage >= 2) {
+			return 10;
+		} else if (stage >= 1) {
+			return 5;
+		}
+	} else if (skill == WHEEL_OF_DESTINY_AVATAR_SKILL_CRITICAL_CHANCE) {
+		return 100;
+	} else if (skill == WHEEL_OF_DESTINY_AVATAR_SKILL_CRITICAL_DAMAGE) {
+		if (stage >= 3) {
+			return 15;
+		} else if (stage >= 2) {
+			return 10;
+		} else if (stage >= 1) {
+			return 5;
+		}
+	}
+
+	return 0;
+}
+
+void Player::onThinkWheelOfDestiny(bool force/* = false*/)
+{
+	bool updateClient = false;
+	wheelOfDestinyCreaturesNearby = 0;
+	if (!hasCondition(CONDITION_INFIGHT) || getZone() == ZONE_PROTECTION || 
+		(!getWheelOfDestinyInstant("Battle Instinct") && !getWheelOfDestinyInstant("Positional Tatics") && !getWheelOfDestinyInstant("Ballistic Mastery") && 
+		!getWheelOfDestinyInstant("Gift of Life") && !getWheelOfDestinyInstant("Combat Mastery") && !getWheelOfDestinyInstant("Divine Empowerment") && getWheelOfDestinyGiftOfCooldown() == 0)) {
+			bool mustReset = false;
+			for (int i = 0; i < static_cast<int>(WHEEL_OF_DESTINY_MAJOR_COUNT); i++) {
+				if (getWheelOfDestinyMajorStat(static_cast<WheelOfDestinyMajor_t>(i)) != 0) {
+					mustReset = true;
+					break;
+				}
+			}
+
+			if (mustReset) {
+				for (int i = 0; i < static_cast<int>(WHEEL_OF_DESTINY_MAJOR_COUNT); i++) {
+					setWheelOfDestinyMajorStat(static_cast<WheelOfDestinyMajor_t>(i), 0);
+				}
+				sendSkills();
+				sendStats();
+				g_game().reloadCreature(this);
+			}
+		return;
+	}
+	// Battle Instinct
+	if (getWheelOfDestinyInstant("Battle Instinct") && (force || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BATTLE_INSTINCT) < OTSYS_TIME())) {
+		if (checkWheelOfDestinyBattleInstinct()) {
+			updateClient = true;
+		}
+	}
+	// Positional Tatics
+	if (getWheelOfDestinyInstant("Positional Tatics") && (force || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_POSITIONAL_TATICS) < OTSYS_TIME())) {
+		if (checkWheelOfDestinyPositionalTatics()) {
+			updateClient = true;
+		}
+	}
+	// Ballistic Mastery
+	if (getWheelOfDestinyInstant("Ballistic Mastery") && (force || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_BALLISTIC_MASTERY) < OTSYS_TIME())) {
+		if (checkWheelOfDestinyBallisticMastery()) {
+			updateClient = true;
+		}
+	}
+	// Gift of life (Cooldown)
+	if (getWheelOfDestinyGiftOfCooldown() > 0/*getWheelOfDestinyInstant("Gift of Life")*/ && getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_GIFT_OF_LIFE) <= OTSYS_TIME()) {
+		decreaseWheelOfDestinyGiftOfCooldown(1);
+		/*updateClient = true;*/
+	}
+	// Combat Mastery
+	if (getWheelOfDestinyInstant("Combat Mastery") && (force || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_COMBAT_MASTERY) < OTSYS_TIME())) {
+		if (checkWheelOfDestinyCombatMastery()) {
+			updateClient = true;
+		}
+	}
+	// Divine Empowerment
+	if (getWheelOfDestinyInstant("Divine Empowerment") && (force || getWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_DIVINE_EMPOWERMENT) < OTSYS_TIME())) {
+		if (checkWheelOfDestinyDivineEmpowerment()) {
+			updateClient = true;
+		}
+	}
+	if (updateClient) {
+		sendSkills();
+		sendStats();
+		//g_game().reloadCreature(this);
+	}
+}
+
+void Player::reduceAllSpellsCooldownTimer(int32_t value)
+{
+	for (Condition* condition : this->getConditions(CONDITION_SPELLCOOLDOWN)) {
+		if (condition->getTicks() <= value) {
+			sendSpellCooldown(condition->getSubId(), 0);
+			condition->endCondition(this);
+		} else {
+			condition->setTicks(condition->getTicks() - value);
+			sendSpellCooldown(condition->getSubId(), condition->getTicks());
+		}
+	}
+}
+
+Spell* Player::getWheelOfDestinyCombatDataSpell(CombatDamage& damage, Creature* target)
+{
+	Spell* spell = nullptr;
+	damage.damageMultiplier += getWheelOfDestinyMajorStatConditional("Divine Empowerment", WHEEL_OF_DESTINY_MAJOR_DAMAGE);
+	WheelOfDestinySpellGrade_t spellGrade = WHEEL_OF_DESTINY_SPELL_GRADE_NONE;
+	if (!(damage.instantSpellName).empty()) {
+		spellGrade = getWheelOfDestinySpellUpgrade(damage.instantSpellName);
+		spell = g_spells().getInstantSpellByName(damage.instantSpellName);
+	} else if (!(damage.runeSpellName).empty()) {
+		spell = g_spells().getRuneSpellByName(damage.runeSpellName);
+	}
+	if (spell) {
+		damage.damageMultiplier += checkWheelOfDestinyFocusMasteryDamage();
+		if (getWheelOfDestinyHealingLinkUpgrade(spell->getName())) {
+			damage.healingLink += 10;
+		}
+		if (spell->getSecondaryGroup() == SPELLGROUP_FOCUS && getWheelOfDestinyInstant("Focus Mastery")) {
+			setWheelOfDestinyOnThinkTimer(WHEEL_OF_DESTINY_ONTHINK_FOCUS_MASTERY, (OTSYS_TIME() + 12000));
+		}
+		if (spell->getWheelOfDestinyUpgraded()) {
+			damage.criticalDamage += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_CRITICAL_DAMAGE, spellGrade);
+			damage.criticalChance += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_CRITICAL_CHANCE, spellGrade);
+			damage.damageMultiplier += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_DAMAGE, spellGrade);
+			damage.damageReductionMultiplier += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_DAMAGE_REDUCTION, spellGrade);
+			damage.healingMultiplier += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_HEAL, spellGrade);
+			damage.manaLeech += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_MANA_LEECH, spellGrade);
+			damage.manaLeechChance += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_LIFE_LEECH_CHANCE, spellGrade);
+			damage.lifeLeech += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_LIFE_LEECH, spellGrade);
+			damage.lifeLeechChance += spell->getWheelOfDestinyBoost(WHEEL_OF_DESTINY_SPELL_BOOST_LIFE_LEECH_CHANCE, spellGrade);
+		}
+	}
+
+	return spell;
 }
 
 /*******************************************************************************

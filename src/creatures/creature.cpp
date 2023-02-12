@@ -399,18 +399,12 @@ void Creature::onCreatureAppear(Creature* creature, bool isLogin)
 
 void Creature::onRemoveCreature(Creature* creature, bool)
 {
-	onCreatureDisappear(creature, true);
-	if (creature != this && isMapLoaded) {
-		if (creature->getPosition().z == getPosition().z) {
-		updateTileCache(creature->getTile(), creature->getPosition());
-		}
-	}
-
-	// Update player from monster target list (avoid memory usage after clean)
-	if (auto monster = getMonster(); monster && monster->getAttackedCreature() == creature) {
-		monster->setAttackedCreature(creature);
-		monster->setFollowCreature(creature);
-	}
+  onCreatureDisappear(creature, true);
+  if (creature != this && isMapLoaded) {
+    if (creature->getPosition().z == getPosition().z) {
+      updateTileCache(creature->getTile(), creature->getPosition());
+    }
+  }
 }
 
 void Creature::onCreatureDisappear(const Creature* creature, bool isLogout)
@@ -498,11 +492,7 @@ void Creature::onCreatureMove(Creature* creature, const Tile* newTile, const Pos
 			stopEventWalk();
 		}
 
-		bool configTeleportSummons = g_configManager().getBoolean(TELEPORT_SUMMONS);
-		checkSummonMove(newPos, configTeleportSummons);
-		if(isLostSummon()) {
-			handleLostSummon(configTeleportSummons);
-		}
+		checkSummonMove(newPos, g_configManager().getBoolean(TELEPORT_SUMMONS));
 
 		if (Player* player = creature->getPlayer()) {
 			if (player->isExerciseTraining()){
@@ -765,7 +755,7 @@ bool Creature::dropCorpse(Creature* lastHitCreature, Creature* mostDamageCreatur
 					int32_t money = 0;
 					for (Item* item : corpse->getContainer()->getItems()) {
 						if (uint32_t worth = item->getWorth(); worth > 0) {
-							money += worth;
+							money += worth; 
 							g_game().internalRemoveItem(item);
 						}
 					}
@@ -913,6 +903,16 @@ BlockType_t Creature::blockHit(Creature* attacker, CombatType_t combatType, int3
 		attacker->onAttackedCreature(this);
 		attacker->onAttackedCreatureBlockHit(blockType);
 	}
+	
+	// Mitigation system
+	if (combatType != COMBAT_MANADRAIN && combatType != COMBAT_LIFEDRAIN) { // Add agony check if the server does have agony combat type
+		damage -= (damage * getMitigation()) / 100.;
+
+		if (damage <= 0) {
+			damage = 0;
+			blockType = BLOCK_ARMOR;
+		}
+	}
 
 	onAttacked();
 	return blockType;
@@ -956,13 +956,9 @@ void Creature::getPathSearchParams(const Creature*, FindPathParams& fpp) const
 void Creature::goToFollowCreature()
 {
 	if (followCreature) {
-		if(isSummon() && !getMonster()->isFamiliar() && !canFollowMaster()){
-			hasFollowPath = false;
-			return;
-		}
-
 		FindPathParams fpp;
 		getPathSearchParams(followCreature, fpp);
+
 		Monster* monster = getMonster();
 		if (monster && !monster->getMaster() && (monster->isFleeing() || fpp.maxTargetDist > 1)) {
 			Direction dir = DIRECTION_NONE;
@@ -1002,10 +998,6 @@ void Creature::goToFollowCreature()
 	}
 
 	onFollowCreatureComplete(followCreature);
-}
-
-bool Creature::canFollowMaster() const {
-	return !master->getTile()->hasFlag(TILESTATE_PROTECTIONZONE) && (canSeeInvisibility() || !master->isInvisible());
 }
 
 bool Creature::setFollowCreature(Creature* creature)
@@ -1373,6 +1365,17 @@ Condition* Creature::getCondition(ConditionType_t type, ConditionId_t conditionI
 	return nullptr;
 }
 
+std::vector<Condition*> Creature::getConditions(ConditionType_t type)
+{
+	std::vector<Condition*> conditionsVec;
+	for (Condition* condition : conditions) {
+		if (condition->getType() == type) {
+			conditionsVec.push_back(condition);
+		}
+	}
+	return conditionsVec;
+}
+
 void Creature::executeConditions(uint32_t interval)
 {
 	auto it = conditions.begin(), end = conditions.end();
@@ -1713,22 +1716,4 @@ void Creature::turnToCreature(Creature* creature)
 		}
 	}
 	g_game().internalCreatureTurn(this, dir);
-}
-
-bool Creature::isLostSummon() const {
-	if (!isSummon()) {
-		return false;
-	}
-	const Position &masterPosition = getMaster()->getPosition();
-	return std::max<int32_t>(Position::getDistanceX(getPosition(), masterPosition),
-							 Position::getDistanceY(getPosition(), masterPosition)) > 30;
-}
-
-void Creature::handleLostSummon(bool teleportSummons) {
-	if (teleportSummons) {
-		g_game().internalTeleport(this, getMaster()->getPosition(), true);
-	} else {
-		g_game().removeCreature(this, true);
-	}
-	g_game().addMagicEffect(getPosition(), CONST_ME_POFF);
 }

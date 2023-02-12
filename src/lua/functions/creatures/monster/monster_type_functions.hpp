@@ -102,6 +102,7 @@ public:
 		registerMethod(L, "MonsterType", "maxSummons", MonsterTypeFunctions::luaMonsterTypeMaxSummons);
 
 		registerMethod(L, "MonsterType", "armor", MonsterTypeFunctions::luaMonsterTypeArmor);
+		registerMethod(L, "MonsterType", "mitigation", MonsterTypeFunctions::luaMonsterTypeMitigation);
 		registerMethod(L, "MonsterType", "defense", MonsterTypeFunctions::luaMonsterTypeDefense);
 		registerMethod(L, "MonsterType", "outfit", MonsterTypeFunctions::luaMonsterTypeOutfit);
 		registerMethod(L, "MonsterType", "race", MonsterTypeFunctions::luaMonsterTypeRace);
@@ -135,6 +136,11 @@ public:
 
 		registerMethod(L, "MonsterType", "respawnTypePeriod", MonsterTypeFunctions::luaMonsterTypeRespawnTypePeriod);
 		registerMethod(L, "MonsterType", "respawnTypeIsUnderground", MonsterTypeFunctions::luaMonsterTypeRespawnTypeIsUnderground);
+		
+		registerMethod(L, "MonsterType", "hazardSystemCrit", MonsterTypeFunctions::luaMonsterTypeHazardSystemCrit);
+		registerMethod(L, "MonsterType", "hazardSystemDodge", MonsterTypeFunctions::luaMonsterTypeHazardSystemDodge);
+		registerMethod(L, "MonsterType", "hazardSystemSpawnPod", MonsterTypeFunctions::luaMonsterTypeHazardSystemSpawnPod);
+		registerMethod(L, "MonsterType", "hazardSystemDamageBoost", MonsterTypeFunctions::luaMonsterTypeHazardSystemDamageBoost);
 	}
 
 private:
@@ -221,6 +227,7 @@ private:
 	static int luaMonsterTypeMaxSummons(lua_State* L);
 
 	static int luaMonsterTypeArmor(lua_State* L);
+	static int luaMonsterTypeMitigation(lua_State* L);
 	static int luaMonsterTypeDefense(lua_State* L);
 	static int luaMonsterTypeOutfit(lua_State* L);
 	static int luaMonsterTypeRace(lua_State* L);
@@ -247,6 +254,11 @@ private:
 
 	static int luaMonsterTypeRespawnTypePeriod(lua_State* L);
 	static int luaMonsterTypeRespawnTypeIsUnderground(lua_State* L);
+	
+	static int luaMonsterTypeHazardSystemCrit(lua_State* L);
+		static int luaMonsterTypeHazardSystemDodge(lua_State* L);
+		static int luaMonsterTypeHazardSystemSpawnPod(lua_State* L);
+		static int luaMonsterTypeHazardSystemDamageBoost(lua_State* L);
 };
 
 #endif  // SRC_LUA_FUNCTIONS_CREATURES_MONSTER_MONSTER_TYPE_FUNCTIONS_HPP_

@@ -105,7 +105,7 @@ bool IOLoginData::preloadPlayer(Player* player, const std::string& name)
   player->setGUID(result->getNumber<uint32_t>("id"));
   Group* group = g_game().groups.getGroup(result->getNumber<uint16_t>("group_id"));
   if (!group) {
-    SPDLOG_ERROR("Player {} has group id {} which doesn't exist", player->name,
+    SPDLOG_ERROR("Player {} has group id {} whitch doesn't exist", player->name,
 			result->getNumber<uint16_t>("group_id"));
     return false;
   }
@@ -138,7 +138,7 @@ bool IOLoginData::loadPlayerByName(Player* player, const std::string& name)
 
 bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 {
-  if (!result || !player) {
+  if (!result) {
     return false;
   }
 
@@ -164,7 +164,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
   Group* group = g_game().groups.getGroup(result->getNumber<uint16_t>("group_id"));
   if (!group) {
-    SPDLOG_ERROR("Player {} has group id {} which doesn't exist", player->name, result->getNumber<uint16_t>("group_id"));
+    SPDLOG_ERROR("Player {} has group id {} whitch doesn't exist", player->name, result->getNumber<uint16_t>("group_id"));
     return false;
   }
   player->setGroup(group);
@@ -216,7 +216,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   }
 
   if (!player->setVocation(result->getNumber<uint16_t>("vocation"))) {
-    SPDLOG_ERROR("Player {} has vocation id {} which doesn't exist",
+    SPDLOG_ERROR("Player {} has vocation id {} whitch doesn't exist",
 			player->name, result->getNumber<uint16_t>("vocation"));
     return false;
   }
@@ -282,7 +282,6 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   player->addTaskHuntingPoints(result->getNumber<uint64_t>("task_points"));
   player->addForgeDusts(result->getNumber<uint64_t>("forge_dusts"));
   player->addForgeDustLevel(result->getNumber<uint64_t>("forge_dust_level"));
-  player->setRandomMount(result->getNumber<uint16_t>("randomize_mount"));
 
   player->lastLoginSaved = result->getNumber<time_t>("lastlogin");
   player->lastLogout = result->getNumber<time_t>("lastlogout");
@@ -293,7 +292,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
   Town* town = g_game().map.towns.getTown(result->getNumber<uint32_t>("town_id"));
   if (!town) {
-    SPDLOG_ERROR("Player {} has town id {} which doesn't exist", player->name,
+    SPDLOG_ERROR("Player {} has town id {} whitch doesn't exist", player->name,
 			result->getNumber<uint16_t>("town_id"));
     return false;
   }
@@ -455,7 +454,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   std::vector<std::pair<uint8_t, Container*>> openContainersList;
 
   if ((result = db.storeQuery(query.str()))) {
-    loadItems(itemMap, result, *player);
+    loadItems(itemMap, result);
 
     for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
       const std::pair<Item*, int32_t>& pair = it->second;
@@ -484,12 +483,12 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
       Container* itemContainer = item->getContainer();
       if (itemContainer) {
-        auto cid = item->getAttribute<int64_t>(ItemAttribute_t::OPENCONTAINER);
+        int64_t cid = item->getIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER);
         if (cid > 0) {
           openContainersList.emplace_back(std::make_pair(cid, itemContainer));
         }
-        if (item->hasAttribute(ItemAttribute_t::QUICKLOOTCONTAINER)) {
-          auto flags = item->getAttribute<int64_t>(ItemAttribute_t::QUICKLOOTCONTAINER);
+        if (item->hasAttribute(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER)) {
+          int64_t flags = item->getIntAttr(ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
           for (uint8_t category = OBJECTCATEGORY_FIRST; category <= OBJECTCATEGORY_LAST; category++) {
             if (hasBitSet(1 << category, flags)) {
               player->setLootContainer((ObjectCategory_t)category, itemContainer, true);
@@ -520,7 +519,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   query.str(std::string());
   query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_depotitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
   if ((result = db.storeQuery(query.str()))) {
-    loadItems(itemMap, result, *player);
+    loadItems(itemMap, result);
 
     for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
       const std::pair<Item*, int32_t>& pair = it->second;
@@ -554,7 +553,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   query.str(std::string());
   query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_rewards` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
     if ((result = db.storeQuery(query.str()))) {
-    loadItems(itemMap, result, *player);
+    loadItems(itemMap, result);
 
     //first loop handles the reward containers to retrieve its date attribute
     //for (ItemMap::iterator it = itemMap.begin(), end = itemMap.end(); it != end; ++it) {
@@ -564,8 +563,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
       int32_t pid = pair.second;
       if (pid >= 0 && pid < 100) {
-        auto rewardId = item->getAttribute<uint32_t>(ItemAttribute_t::DATE);
-        Reward* reward = player->getReward(rewardId, true);
+        Reward* reward = player->getReward(item->getIntAttr(ITEM_ATTRIBUTE_DATE), true);
         if (reward) {
           it.second = std::pair<Item*, int32_t>(reward->getItem(), pid); //update the map with the special reward container
         }
@@ -603,7 +601,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
   query.str(std::string());
   query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_inboxitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
   if ((result = db.storeQuery(query.str()))) {
-    loadItems(itemMap, result, *player);
+    loadItems(itemMap, result);
 
     for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
       const std::pair<Item*, int32_t>& pair = it->second;
@@ -736,6 +734,7 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 	player->initializeTaskHunting();
   player->updateBaseSpeed();
   player->updateInventoryWeight();
+  player->updateInventoryImbuement(true);
   player->updateItemsLight(true);
   return true;
 }
@@ -758,8 +757,8 @@ bool IOLoginData::saveItems(const Player* player, const ItemBlockList& itemList,
     ++runningId;
 
     if (Container* container = item->getContainer()) {
-      if (container->getAttribute<int64_t>(ItemAttribute_t::OPENCONTAINER) > 0) {
-        container->setAttribute(ItemAttribute_t::OPENCONTAINER, 0);
+      if (container->getIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER) > 0) {
+        container->setIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER, 0);
       }
 
       if (!openContainers.empty()) {
@@ -768,7 +767,7 @@ bool IOLoginData::saveItems(const Player* player, const ItemBlockList& itemList,
           auto opcontainer = openContainer.container;
 
           if (opcontainer == container) {
-            container->setAttribute(ItemAttribute_t::OPENCONTAINER, ((int)its.first) + 1);
+            container->setIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER, ((int)its.first) + 1);
             break;
           }
         }
@@ -802,8 +801,8 @@ bool IOLoginData::saveItems(const Player* player, const ItemBlockList& itemList,
       Container* subContainer = item->getContainer();
       if (subContainer) {
         queue.emplace_back(subContainer, runningId);
-        if (subContainer->getAttribute<int64_t>(ItemAttribute_t::OPENCONTAINER) > 0) {
-          subContainer->setAttribute(ItemAttribute_t::OPENCONTAINER, 0);
+        if (subContainer->getIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER) > 0) {
+          subContainer->setIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER, 0);
         }
 
         if (!openContainers.empty()) {
@@ -812,7 +811,7 @@ bool IOLoginData::saveItems(const Player* player, const ItemBlockList& itemList,
             auto opcontainer = openContainer.container;
 
             if (opcontainer == subContainer) {
-              subContainer->setAttribute(ItemAttribute_t::OPENCONTAINER, (it.first) + 1);
+              subContainer->setIntAttr(ITEM_ATTRIBUTE_OPENCONTAINER, ((int)it.first) + 1);
               break;
             }
           }
@@ -892,7 +891,6 @@ bool IOLoginData::savePlayer(Player* player)
   query << "`task_points` = " << player->getTaskHuntingPoints() << ',';
   query << "`forge_dusts` = " << player->getForgeDusts() << ',';
   query << "`forge_dust_level` = " << player->getForgeDustLevel() << ',';
-  query << "`randomize_mount` = " << static_cast<uint16_t>(player->isRandomMounted()) << ',';
 
   query << "`cap` = " << (player->capacity / 100) << ',';
   query << "`sex` = " << static_cast<uint16_t>(player->sex) << ',';
@@ -1353,7 +1351,7 @@ bool IOLoginData::formatPlayerName(std::string& name)
   return true;
 }
 
-void IOLoginData::loadItems(ItemMap& itemMap, DBResult_ptr result, Player &player)
+void IOLoginData::loadItems(ItemMap& itemMap, DBResult_ptr result)
 {
   do {
     uint32_t sid = result->getNumber<uint32_t>("sid");
@@ -1370,8 +1368,7 @@ void IOLoginData::loadItems(ItemMap& itemMap, DBResult_ptr result, Player &playe
     Item* item = Item::CreateItem(type, count);
     if (item) {
       if (!item->unserializeAttr(propStream)) {
-        SPDLOG_WARN("[IOLoginData::loadItems] - Failed to unserialize attributes of item {}, of player {}, from account id {}", item->getID(), player.getName(), player.getAccount());
-        savePlayer(&player);
+        SPDLOG_WARN("[IOLoginData::loadItems] - Failed to unserialize attributes");
       }
 
       std::pair<Item*, uint32_t> pair(item, pid);

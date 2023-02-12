@@ -122,6 +122,8 @@ void LuaEnums::initOthersEnums(lua_State* L) {
 	registerEnum(L, ORIGIN_MELEE);
 	registerEnum(L, ORIGIN_RANGED);
 	
+	registerEnum(L, ORIGIN_REFLECT);
+	
 	registerEnum(L, PLAYERSEX_FEMALE);
 	registerEnum(L, PLAYERSEX_MALE);
 
@@ -366,6 +368,7 @@ void LuaEnums::initConditionParamEnums(lua_State* L) {
 	registerEnum(L, CONDITION_PARAM_MANASHIELD);
 	registerEnum(L, CONDITION_PARAM_BUFF_DAMAGEDEALT);
 	registerEnum(L, CONDITION_PARAM_BUFF_DAMAGERECEIVED);
+	registerEnum(L, CONDITION_PARAM_DRAIN_BODY);
 }
 
 void LuaEnums::initConstMeEnums(lua_State* L) {
@@ -506,6 +509,13 @@ void LuaEnums::initConstMeEnums(lua_State* L) {
 	registerEnum(L, CONST_ME_HORESTIS);
 	registerEnum(L, CONST_ME_DEVOVORGA);
 	registerEnum(L, CONST_ME_FERUMBRAS_2);
+	registerEnum(L, CONST_ME_WHITE_SMOKE);
+			registerEnum(L, CONST_ME_WHITE_SMOKES);
+			registerEnum(L, CONST_ME_WATER_DROP);
+			registerEnum(L, CONST_ME_AVATAR_APPEAR);
+			registerEnum(L, CONST_ME_DIVINE_GRENADE);
+			registerEnum(L, CONST_ME_DIVINE_EMPOWERMENT);
+			registerEnum(L, CONST_ME_WATER_FLOATING_THRASH);
 }
 
 void LuaEnums::initConstAniEnums(lua_State* L) {
@@ -686,12 +696,34 @@ void LuaEnums::initFightModeEnums(lua_State* L) {
 }
 
 void LuaEnums::initItemAttributeEnums(lua_State* L) {
-	for (auto value : magic_enum::enum_values<ItemAttribute_t>()) {
-		auto number = magic_enum::enum_integer(value);
-		// Creation of the "ITEM_ATTRIBUTE_" namespace for lua scripts
-		std::string enumName = "ITEM_ATTRIBUTE_" + std::string(magic_enum::enum_name(value));
-		registerGlobalVariable(L, enumName, static_cast<lua_Number>(number));
-	}
+	registerEnum(L, ITEM_ATTRIBUTE_NONE);
+	registerEnum(L, ITEM_ATTRIBUTE_ACTIONID);
+	registerEnum(L, ITEM_ATTRIBUTE_UNIQUEID);
+	registerEnum(L, ITEM_ATTRIBUTE_DESCRIPTION);
+	registerEnum(L, ITEM_ATTRIBUTE_TEXT);
+	registerEnum(L, ITEM_ATTRIBUTE_DATE);
+	registerEnum(L, ITEM_ATTRIBUTE_WRITER);
+	registerEnum(L, ITEM_ATTRIBUTE_NAME);
+	registerEnum(L, ITEM_ATTRIBUTE_ARTICLE);
+	registerEnum(L, ITEM_ATTRIBUTE_PLURALNAME);
+	registerEnum(L, ITEM_ATTRIBUTE_WEIGHT);
+	registerEnum(L, ITEM_ATTRIBUTE_ATTACK);
+	registerEnum(L, ITEM_ATTRIBUTE_DEFENSE);
+	registerEnum(L, ITEM_ATTRIBUTE_EXTRADEFENSE);
+	registerEnum(L, ITEM_ATTRIBUTE_ARMOR);
+	registerEnum(L, ITEM_ATTRIBUTE_HITCHANCE);
+	registerEnum(L, ITEM_ATTRIBUTE_SHOOTRANGE);
+	registerEnum(L, ITEM_ATTRIBUTE_OWNER);
+	registerEnum(L, ITEM_ATTRIBUTE_DURATION);
+	registerEnum(L, ITEM_ATTRIBUTE_DECAYSTATE);
+	registerEnum(L, ITEM_ATTRIBUTE_CORPSEOWNER);
+	registerEnum(L, ITEM_ATTRIBUTE_CHARGES);
+	registerEnum(L, ITEM_ATTRIBUTE_FLUIDTYPE);
+	registerEnum(L, ITEM_ATTRIBUTE_DOORID);
+	registerEnum(L, ITEM_ATTRIBUTE_SPECIAL);
+	registerEnum(L, ITEM_ATTRIBUTE_OPENCONTAINER);
+	registerEnum(L, ITEM_ATTRIBUTE_QUICKLOOTCONTAINER);
+	registerEnum(L, ITEM_ATTRIBUTE_DURATION_TIMESTAMP);
 }
 
 void LuaEnums::initItemTypeEnums(lua_State* L) {
@@ -732,6 +764,7 @@ void LuaEnums::initItemTypeEnums(lua_State* L) {
 	registerEnum(L, ITEM_TYPE_RETRIEVE);
 	registerEnum(L, ITEM_TYPE_GOLD);
 	registerEnum(L, ITEM_TYPE_UNASSIGNED);
+	registerEnum(L, ITEM_PRIMAL_POD);
 }
 
 void LuaEnums::initItemIdEnums(lua_State* L) {
@@ -787,10 +820,11 @@ void LuaEnums::initItemIdEnums(lua_State* L) {
 
 	registerEnum(L, ITEM_GOLD_POUCH);
 	registerEnum(L, ITEM_STORE_INBOX);
+	
+	registerEnum(L, ITEM_DIVINE_EMPOWERMENT_WOD);
 
 	registerEnum(L, ITEM_FORGE_SLIVER);
 	registerEnum(L, ITEM_FORGE_CORE);
-	registerEnum(L, ItemID_t::HIRELING_LAMP);
 }
 
 void LuaEnums::initPlayerFlagEnums(lua_State* L) {

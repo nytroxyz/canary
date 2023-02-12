@@ -296,6 +296,9 @@ class Creature : virtual public Thing
 		virtual int32_t getArmor() const {
 			return 0;
 		}
+		virtual float getMitigation() const {
+			return 0;
+		}
 		virtual int32_t getDefense() const {
 			return 0;
 		}
@@ -318,6 +321,7 @@ class Creature : virtual public Thing
 		void removeCombatCondition(ConditionType_t type);
 		Condition* getCondition(ConditionType_t type) const;
 		Condition* getCondition(ConditionType_t type, ConditionId_t conditionId, uint32_t subId = 0) const;
+		std::vector<Condition*> getConditions(ConditionType_t type);
 		void executeConditions(uint32_t interval);
 		bool hasCondition(ConditionType_t type, uint32_t subId = 0) const;
 		virtual bool isImmune(ConditionType_t type) const;
@@ -396,11 +400,11 @@ class Creature : virtual public Thing
 
 		/**
 		 * @brief Check if the summon can move/spawn and if the familiar can teleport to the master
-		 *
+		 * 
 		 * @param newPos New position to teleport
 		 * @param teleportSummon Can teleport normal summon? Default value is "false"
-		 * @return true
-		 * @return false
+		 * @return true 
+		 * @return false 
 		 */
 		void checkSummonMove(const Position& newPos, bool teleportSummon = false) const;
 		virtual void onCreatureMove(Creature* creature, const Tile* newTile, const Position& newPos,
@@ -423,7 +427,7 @@ class Creature : virtual public Thing
 
 		/**
 		 * @brief Check if the "summons" list is empty
-		 *
+		 * 
 		 * @return true = not empty
 		 * @return false = empty
 		 */
@@ -433,7 +437,7 @@ class Creature : virtual public Thing
 			}
 			return false;
 		}
-
+		
 		void setDropLoot(bool newLootDrop) {
 			this->lootDrop = newLootDrop;
 		}
@@ -498,6 +502,12 @@ class Creature : virtual public Thing
 		using CountMap = std::map<uint32_t, CountBlock_t>;
 		CountMap getDamageMap() const {
 				return damageMap;
+		}
+		void setWheelOfDestinyDrainBodyDebuff(uint8_t value) {
+			wheelOfDestinyDrainBodyDebuff = value;
+		}
+		uint8_t getWheelOfDestinyDrainBodyDebuff() const {
+			return wheelOfDestinyDrainBodyDebuff;
 		}
 
 	protected:
@@ -579,6 +589,8 @@ class Creature : virtual public Thing
 		bool floorChange = false;
 		bool canUseDefense = true;
 		bool moveLocked = false;
+		
+		uint8_t wheelOfDestinyDrainBodyDebuff = 0;
 
 		//creature script events
 		bool hasEventRegistered(CreatureEventType_t event) const {
@@ -610,11 +622,6 @@ class Creature : virtual public Thing
 		friend class Game;
 		friend class Map;
 		friend class CreatureFunctions;
-
-	private:
-		bool canFollowMaster() const;
-		bool isLostSummon() const;
-		void handleLostSummon(bool teleportSummons);
 };
 
 #endif  // SRC_CREATURES_CREATURE_H_
