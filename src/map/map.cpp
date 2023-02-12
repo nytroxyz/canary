@@ -409,38 +409,48 @@ void Map::getSpectatorsInternal(SpectatorHashSet& spectators, const Position& ce
 
 
 
-void Map::getSpectators(SpectatorHashSet& spectators, const Position& centerPos, bool multifloor, bool onlyPlayers, int32_t minRangeX, int32_t maxRangeX, int32_t minRangeY, int32_t maxRangeY)
+void Map::getSpectators(SpectatorHashSet& spectators, const Position& centerPos, bool multifloor /*= false*/, bool onlyPlayers /*= false*/, int32_t minRangeX /*= 0*/, int32_t maxRangeX /*= 0*/, int32_t minRangeY /*= 0*/, int32_t maxRangeY /*= 0*/)
 {
-    if (centerPos.z >= MAP_MAX_LAYERS) {
-        return;
-    }
+	if (centerPos.z >= MAP_MAX_LAYERS) {
+		return;
+	}
 
-    minRangeX = (minRangeX == 0 ? -maxViewportX : -minRangeX);
-    maxRangeX = (maxRangeX == 0 ? maxViewportX : maxRangeX);
-    minRangeY = (minRangeY == 0 ? -maxViewportY : -minRangeY);
-    maxRangeY = (maxRangeY == 0 ? maxViewportY : maxRangeY);
+	minRangeX = (minRangeX == 0 ? -maxViewportX : -minRangeX);
+	maxRangeX = (maxRangeX == 0 ? maxViewportX : maxRangeX);
+	minRangeY = (minRangeY == 0 ? -maxViewportY : -minRangeY);
+	maxRangeY = (maxRangeY == 0 ? maxViewportY : maxRangeY);
 
-    int32_t minRangeZ;
-    int32_t maxRangeZ;
+	int32_t minRangeZ = 0, maxRangeZ = MAP_MAX_LAYERS - 1;
+	if (multifloor) {
+		if (centerPos.z > MAP_INIT_SURFACE_LAYER) {
+			minRangeZ = std::max(centerPos.z - MAP_LAYER_VIEW_LIMIT, 0);
+			maxRangeZ = std::min(centerPos.z + MAP_LAYER_VIEW_LIMIT, MAP_MAX_LAYERS - 1);
+		} else {
+			maxRangeZ = std::min(MAP_INIT_SURFACE_LAYER + MAP_LAYER_VIEW_LIMIT, MAP_MAX_LAYERS - 1);
+		}
+	} else {
+		minRangeZ = centerPos.z;
+		maxRangeZ = centerPos.z;
+	}
 
-    if (multifloor) {
-        minRangeZ = 0;
-        maxRangeZ = MAP_MAX_LAYERS - 1;
-        if (centerPos.z > MAP_INIT_SURFACE_LAYER) {
-            // Underground
-            minRangeZ = std::max(centerPos.getZ() - MAP_LAYER_VIEW_LIMIT, 0);
-            maxRangeZ = std::min(centerPos.getZ() + MAP_LAYER_VIEW_LIMIT, MAP_MAX_LAYERS - 1);
-        } else if (centerPos.z == MAP_INIT_SURFACE_LAYER - 1 || centerPos.z == MAP_INIT_SURFACE_LAYER) {
-            maxRangeZ = centerPos.z + MAP_LAYER_VIEW_LIMIT;
-        }
-    } else {
-        minRangeZ = centerPos.z;
-        maxRangeZ = centerPos.z;
-    }
-
-    getSpectatorsInternal(spectators, centerPos, minRangeX, maxRangeX, minRangeY, maxRangeY, minRangeZ, maxRangeZ, onlyPlayers);
+	SpectatorCache& cache = onlyPlayers ? playersSpectatorCache : spectatorCache;
+	auto it = cache.find(centerPos);
+	if (it != cache.end()) {
+		spectators = it->second;
+		if (onlyPlayers) {
+			for (auto it = spectators.begin(); it != spectators.end();) {
+				if (!(*it)->getPlayer()) {
+					it = spectators.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+	} else {
+		getSpectatorsInternal(spectators, centerPos, minRangeX, maxRangeX, minRangeY, maxRangeY, minRangeZ, maxRangeZ, onlyPlayers);
+		cache[centerPos] = spectators;
+	}
 }
-
 
 void Map::clearSpectatorCache()
 {
