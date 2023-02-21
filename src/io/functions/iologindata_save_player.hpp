@@ -35,7 +35,7 @@ class IOLoginDataSave : public IOLoginData {
 		using ItemRewardList = std::list<std::pair<int32_t, Item*>>;
 		using ItemInboxList = std::list<std::pair<int32_t, Item*>>;
 
-		static bool saveItems(const Player* player, const ItemBlockList& itemList, DBInsert& query_insert, PropWriteStream& stream);
+		static bool saveItems(const Player* player, const ItemBlockList &itemList, DBInsert &query_insert, PropWriteStream &stream);
 };
 
 #endif // SRC_IO__FUNCTIONS_IOLOGINDATASAVE_HPP_
