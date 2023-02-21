@@ -150,7 +150,7 @@ bool Monsters::deserializeSpell(MonsterSpell* spell, spellBlock_t &sb, const std
 			conditionType = CONDITION_PARALYZE;
 		}
 
-		ConditionSpeed *condition = static_cast<ConditionSpeed*> (Condition::createCondition(CONDITIONID_COMBAT, conditionType, duration, 0));
+		ConditionSpeed* condition = static_cast<ConditionSpeed*>(Condition::createCondition(CONDITIONID_COMBAT, conditionType, duration, 0));
 		speedChangeRange = speedChange / 2;
 		speedChangeMin = uniform_random(speedChangeRange, speedChange);
 		condition->setFormulaVars(speedChange / 1000.0, 40, speedChange / 1000.0, 40);
