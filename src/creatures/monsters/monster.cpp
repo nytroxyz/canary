@@ -888,7 +888,7 @@ bool Monster::canUseAttack(const Position &pos, const Creature* target) const {
 	return true;
 }
 
-bool Monster::canUseSpell(const Position &pos, const Position &targetPos, const spellBlock_t &sb, uint32_t interval, bool &inRange, bool &resetTicks) {
+bool Monster::canUseSpell(const Position &pos, const Position &targetPos, const spellBlock_t &sb, uint32_t interval, bool &inRange, bool &resetTicks) const {
 	inRange = true;
 
 	if (sb.isMelee) {
@@ -1220,7 +1220,7 @@ bool Monster::getRandomStep(const Position &creaturePos, Direction &moveDirectio
 	return false;
 }
 
-bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection, bool keepAttack /*= true*/, bool keepDistance /*= true*/) {
+bool Monster::getDanceStep(const Position &creaturePos, const Direction &moveDirection, bool keepAttack /*= true*/, bool keepDistance /*= true*/) {
 	bool canDoAttackNow = canUseAttack(creaturePos, attackedCreature);
 
 	assert(attackedCreature != nullptr);
@@ -1240,7 +1240,7 @@ bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection
 	}
 
 	std::array<Direction, 4> dirList;
-	size_t directions = static_cast<size_t>(-1);
+	auto directions = static_cast<size_t>(-1);
 
 	if (!keepDistance || offset_y >= 0) {
 		uint32_t tmpDist = std::max<uint32_t>(distance_x, std::abs((creaturePos.getY() - 1) - centerPos.getY()));
@@ -1252,7 +1252,8 @@ bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection
 			}
 
 			if (result) {
-				dirList[++directions] = DIRECTION_NORTH;
+				++directions;
+				dirList[directions] = DIRECTION_NORTH;
 			}
 		}
 	}
@@ -1267,7 +1268,8 @@ bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection
 			}
 
 			if (result) {
-				dirList[++directions] = DIRECTION_SOUTH;
+				++directions;
+				dirList[directions] = DIRECTION_SOUTH;
 			}
 		}
 	}
@@ -1282,7 +1284,8 @@ bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection
 			}
 
 			if (result) {
-				dirList[++directions] = DIRECTION_EAST;
+				++directions;
+				dirList[directions] = DIRECTION_EAST;
 			}
 		}
 	}
@@ -1297,7 +1300,8 @@ bool Monster::getDanceStep(const Position &creaturePos, Direction &moveDirection
 			}
 
 			if (result) {
-				dirList[++directions] = DIRECTION_WEST;
+				++directions;
+				dirList[directions] = DIRECTION_WEST;
 			}
 		}
 	}
