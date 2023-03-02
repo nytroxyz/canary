@@ -30,7 +30,6 @@
 #include <variant>
 
 #include <asio.hpp>
-#include <curl/curl.h>
 #include <fmt/chrono.h>
 #include <gmp.h>
 #include <json/json.h>
@@ -47,5 +46,11 @@
 #include <parallel_hashmap/phmap.h>
 #include <pugixml.hpp>
 #include <zlib.h>
+// HTTP connection library
+#if __linux
+	#include <dpp/dpp.h>
+#elif defined(WIN32)
+	#include <wininet.h>
+#endif
 
 #endif // SRC_PCH_HPP_
