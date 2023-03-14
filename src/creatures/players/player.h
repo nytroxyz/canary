@@ -2601,6 +2601,7 @@ class Player final : public Creature, public Cylinder {
 		friend class ProtocolGame;
 		friend class MoveEvent;
 		friend class BedItem;
+		friend class Save;
 
 		account::Account* account_;
 

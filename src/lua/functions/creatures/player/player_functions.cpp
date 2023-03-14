@@ -18,6 +18,7 @@
 #include "io/ioprey.h"
 #include "items/item.h"
 #include "lua/functions/creatures/player/player_functions.hpp"
+#include "io/save/save.hpp"
 
 int PlayerFunctions::luaPlayerSendInventory(lua_State* L) {
 	// player:sendInventory()
@@ -2565,7 +2566,7 @@ int PlayerFunctions::luaPlayerSave(lua_State* L) {
 		if (!player->isOffline()) {
 			player->loginPosition = player->getPosition();
 		}
-		pushBoolean(L, IOLoginData::savePlayer(player));
+		pushBoolean(L, Save::savePlayerAsync(player));
 		if (player->isOffline()) {
 			delete player; // avoiding memory leak
 		}

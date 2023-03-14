@@ -13,6 +13,7 @@
 #include "game/game.h"
 #include "io/iologindata.h"
 #include "game/scheduling/scheduler.h"
+#include "io/save/save.hpp"
 
 BedItem::BedItem(uint16_t id) :
 	Item(id) {
@@ -167,7 +168,7 @@ void BedItem::wakeUp(Player* player) {
 			Player regenPlayer(nullptr);
 			if (IOLoginData::loadPlayerById(&regenPlayer, sleeperGUID)) {
 				regeneratePlayer(&regenPlayer);
-				IOLoginData::savePlayer(&regenPlayer);
+				Save::savePlayerAsync(&regenPlayer);
 			}
 		} else {
 			regeneratePlayer(player);

@@ -37,6 +37,7 @@
 #include "creatures/npcs/npcs.h"
 #include "server/network/webhook/webhook.h"
 #include "protobuf/appearances.pb.h"
+#include "io/save/save.hpp"
 
 Game::Game() {
 	offlineTrainingWindow.choices.emplace_back("Sword Fighting and Shielding", SKILL_SWORD);
@@ -254,14 +255,10 @@ void Game::saveGameState() {
 
 	for (const auto &it : players) {
 		it.second->loginPosition = it.second->getPosition();
-		IOLoginData::savePlayer(it.second);
+		Save::savePlayerAsync(it.second);
 	}
 
-	for (const auto &it : guilds) {
-		IOGuild::saveGuild(it.second);
-	}
-
-	Map::save();
+	Save::saveHouseAsync(true);
 
 	g_databaseTasks().flush();
 
@@ -7526,7 +7523,7 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t ite
 
 	// Exhausted for create offert in the market
 	player->updateUIExhausted();
-	IOLoginData::savePlayer(player);
+	Save::savePlayerAsync(player);
 }
 
 void Game::playerCancelMarketOffer(uint32_t playerId, uint32_t timestamp, uint16_t counter) {
@@ -7610,7 +7607,7 @@ void Game::playerCancelMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 	player->sendMarketEnter(player->getLastDepotId());
 	// Exhausted for cancel offer in the market
 	player->updateUIExhausted();
-	IOLoginData::savePlayer(player);
+	Save::savePlayerAsync(player);
 }
 
 void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16_t counter, uint16_t amount) {
@@ -7753,7 +7750,7 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 		}
 
 		if (buyerPlayer->isOffline()) {
-			IOLoginData::savePlayer(buyerPlayer);
+			Save::savePlayerAsync(buyerPlayer);
 			delete buyerPlayer;
 		}
 	} else if (offer.type == MARKETACTION_SELL) {
@@ -7853,7 +7850,7 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 		}
 
 		if (sellerPlayer->isOffline()) {
-			IOLoginData::savePlayer(sellerPlayer);
+			Save::savePlayerAsync(sellerPlayer);
 			delete sellerPlayer;
 		}
 	}
@@ -7885,7 +7882,7 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 	player->sendMarketAcceptOffer(offer);
 	// Exhausted for accept offer in the market
 	player->updateUIExhausted();
-	IOLoginData::savePlayer(player);
+	Save::savePlayerAsync(player);
 }
 
 void Game::parsePlayerExtendedOpcode(uint32_t playerId, uint8_t opcode, const std::string &buffer) {

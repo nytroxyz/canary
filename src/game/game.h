@@ -312,7 +312,7 @@ class Game {
 		void playerLootAllCorpses(Player* player, const Position &pos, bool lootAllCorpses);
 		void playerSetLootContainer(uint32_t playerId, ObjectCategory_t category, const Position &pos, uint16_t itemId, uint8_t stackPos);
 		void playerClearLootContainer(uint32_t playerId, ObjectCategory_t category);
-		;
+
 		void playerOpenLootContainer(uint32_t playerId, ObjectCategory_t category);
 		void playerSetQuickLootFallback(uint32_t playerId, bool fallback);
 		void playerQuickLootBlackWhitelist(uint32_t playerId, QuickLootFilter_t filter, const std::vector<uint16_t> itemIds);
@@ -627,6 +627,7 @@ class Game {
 
 		bool isDay = false;
 		bool browseField = false;
+		bool saveMap = false;
 
 		GameState_t gameState = GAME_STATE_NORMAL;
 		WorldType_t worldType = WORLD_TYPE_PVP;
@@ -690,6 +691,8 @@ class Game {
 			const Player* targetPlayer, TextMessage &message, std::stringstream &ss,
 			const std::string &damageString, std::string &spectatorMessage
 		) const;
+
+		friend class Save;
 };
 
 constexpr auto g_game = &Game::getInstance;

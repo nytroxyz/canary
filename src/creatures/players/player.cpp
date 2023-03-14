@@ -24,6 +24,7 @@
 #include "io/iobestiary.h"
 #include "items/bed.h"
 #include "items/weapons/weapons.h"
+#include "io/save/save.hpp"
 
 MuteCountMap Player::muteCountMap;
 
@@ -1617,7 +1618,7 @@ void Player::onRemoveCreature(Creature* creature, bool isLogout) {
 
 		bool saved = false;
 		for (uint32_t tries = 0; tries < 3; ++tries) {
-			if (IOLoginData::savePlayer(this)) {
+			if (Save::savePlayerAsync(this)) {
 				saved = true;
 				break;
 			}
@@ -1626,6 +1627,7 @@ void Player::onRemoveCreature(Creature* creature, bool isLogout) {
 		if (!saved) {
 			SPDLOG_WARN("Error while saving player: {}", getName());
 		}
+		Save::removePlayerFromSaveQueue(this);
 	}
 
 	if (creature == shopOwner) {

@@ -200,6 +200,7 @@ PRIVATE
 	io/iomapserialize.cpp
 	io/iomarket.cpp
 	io/ioprey.cpp
+	io/save/save.cpp
 	protobuf/appearances.pb.cc
 	items/bed.cpp
 	items/containers/container.cpp

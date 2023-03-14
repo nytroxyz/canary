@@ -14,6 +14,7 @@
 #include "io/iologindata.h"
 #include "game/game.h"
 #include "game/scheduling/scheduler.h"
+#include "io/save/save.hpp"
 
 uint8_t IOMarket::getTierFromDatabaseTable(const std::string &string) {
 	auto tier = static_cast<uint8_t>(std::atoi(string.c_str()));
@@ -179,7 +180,7 @@ void IOMarket::processExpiredOffers(DBResult_ptr result, bool) {
 			}
 
 			if (player->isOffline()) {
-				IOLoginData::savePlayer(player);
+				Save::savePlayerAsync(player);
 				delete player;
 			}
 		} else {

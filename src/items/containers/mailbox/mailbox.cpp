@@ -12,6 +12,7 @@
 #include "items/containers/mailbox/mailbox.h"
 #include "game/game.h"
 #include "io/iologindata.h"
+#include "io/save/save.hpp"
 
 ReturnValue Mailbox::queryAdd(int32_t, const Thing &thing, uint32_t, uint32_t, Creature*) const {
 	const Item* item = thing.getItem();
@@ -109,7 +110,7 @@ bool Mailbox::sendItem(Item* item) const {
 				newItem->setAttribute(ItemAttribute_t::DATE, date);
 				newItem->setAttribute(ItemAttribute_t::TEXT, text);
 			}
-			IOLoginData::savePlayer(&tmpPlayer);
+			Save::savePlayerAsync(&tmpPlayer);
 			return true;
 		}
 	}
