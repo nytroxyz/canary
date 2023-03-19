@@ -54,6 +54,7 @@ enum GameState_t {
 	GAME_STATE_SHUTDOWN,
 	GAME_STATE_CLOSING,
 	GAME_STATE_MAINTAIN,
+	GAME_STATE_SAVED,
 };
 
 enum QuickLootFilter_t {

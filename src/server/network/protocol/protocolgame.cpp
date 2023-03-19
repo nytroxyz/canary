@@ -18,6 +18,7 @@
 #include "io/io_bosstiary.hpp"
 #include "io/iologindata.h"
 #include "io/iomarket.h"
+#include "io/save/save.hpp"
 #include "lua/modules/modules.h"
 #include "creatures/monsters/monster.h"
 #include "creatures/monsters/monsters.h"
@@ -411,6 +412,11 @@ void ProtocolGame::logout(bool displayEffect, bool forced) {
 		}
 	}
 
+	if (Save::checkIfPlayerInList(player) && removePlayer) {
+		player->sendCancelMessage(RETURNVALUE_RESCUEINRUNNINGPLEASEWAIT);
+		return;
+	}
+
 	if (removePlayer && !g_creatureEvents().playerLogout(player)) {
 		return;
 	}
@@ -498,6 +504,11 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage &msg) {
 
 	if (g_game().getGameState() == GAME_STATE_MAINTAIN) {
 		disconnectClient("Gameworld is under maintenance. Please re-connect in a while.");
+		return;
+	}
+
+	if (Save::checkIfPlayerInList(player)) {
+		disconnectClient("You are currently on the save list. Please wait a moment.");
 		return;
 	}
 

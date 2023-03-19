@@ -636,6 +636,7 @@ void LuaEnums::initGameStateEnums(lua_State* L) {
 	registerEnum(L, GAME_STATE_SHUTDOWN);
 	registerEnum(L, GAME_STATE_CLOSING);
 	registerEnum(L, GAME_STATE_MAINTAIN);
+	registerEnum(L, GAME_STATE_SAVED);
 }
 
 void LuaEnums::initMessageEnums(lua_State* L) {
@@ -1073,6 +1074,7 @@ void LuaEnums::initReturnValueEnums(lua_State* L) {
 	registerEnum(L, RETURNVALUE_NOTENOUGHFISHLEVEL);
 	registerEnum(L, RETURNVALUE_REWARDCHESTISEMPTY);
 	registerEnum(L, RETURNVALUE_CONTACTADMINISTRATOR);
+	registerEnum(L, RETURNVALUE_RESCUEINRUNNINGPLEASEWAIT);
 }
 
 // Reload

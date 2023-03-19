@@ -132,6 +132,11 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage &msg) {
 		return;
 	}
 
+	if (g_game().getGameState() == GAME_STATE_SAVED) {
+		disconnectClient("You are currently on the save list. Please wait a moment.", version);
+		return;
+	}
+
 	BanInfo banInfo;
 	auto curConnection = getConnection();
 	if (!curConnection) {

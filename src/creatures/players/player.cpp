@@ -1616,18 +1616,7 @@ void Player::onRemoveCreature(Creature* creature, bool isLogout) {
 
 		closeShopWindow();
 
-		bool saved = false;
-		for (uint32_t tries = 0; tries < 3; ++tries) {
-			if (Save::savePlayerAsync(this)) {
-				saved = true;
-				break;
-			}
-		}
-
-		if (!saved) {
-			SPDLOG_WARN("Error while saving player: {}", getName());
-		}
-		Save::removePlayerFromSaveQueue(this);
+		Save::savePlayerAsync(this);
 	}
 
 	if (creature == shopOwner) {

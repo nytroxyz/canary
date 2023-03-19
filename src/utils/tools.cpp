@@ -1304,6 +1304,9 @@ const char* getReturnMessage(ReturnValue value) {
 		case RETURNVALUE_CONTACTADMINISTRATOR:
 			return "An error has occurred, please contact your administrator.";
 
+		case RETURNVALUE_RESCUEINRUNNINGPLEASEWAIT:
+			return "You are currently on the save list. Please wait a moment.";
+
 		// Any unhandled ReturnValue will go enter here
 		default:
 			return "Unknown error.";

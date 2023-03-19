@@ -20,36 +20,47 @@ std::atomic_bool Save::savePlayerInProgress = false;
 std::atomic_bool Save::saveHouseInProgress = false;
 std::jthread Save::savePlayerThread;
 std::jthread Save::saveHouseThread;
-std::mutex Save::listPlayerMutex;
-std::mutex Save::savePlayerMutex;
+std::shared_mutex Save::listPlayerMutex;
+std::shared_mutex Save::eraseListMutex;
+std::shared_mutex Save::savePlayerMutex;
 std::mutex Save::saveHouseMutex;
-std::mutex Save::eraseListMutex;
 
 bool Save::savePlayerAsync(Player* player) {
 	if (player != nullptr) {
+		std::unique_lock<std::shared_mutex> addListLock(listPlayerMutex);
 		playersToSaveList.emplace(player);
+		addListLock.unlock();
 	}
 
 	if (!savePlayerThread.joinable() && !savePlayerInProgress) {
 		savePlayerInProgress = true;
 		savePlayerThread = std::jthread([player]() {
 			while (!playersToSaveList.empty() && player != nullptr) {
-				std::unique_lock<std::mutex> savePlayerLock(savePlayerMutex);
 				Player* currentPlayer = *playersToSaveList.begin();
-
 				if (currentPlayer != nullptr) {
-					IOLoginData::savePlayer(currentPlayer);
-				}
+					bool saved = false;
+					for (uint32_t tries = 0; tries < 3; ++tries) {
+						if (IOLoginData::savePlayer(currentPlayer)) {
+							saved = true;
+							break;
+						}
+					}
 
-				playersToSaveList.erase(currentPlayer);
-				savePlayerLock.unlock();
+					if (!saved) {
+						SPDLOG_WARN("Error while saving player: {}", currentPlayer->getName());
+					}
+
+					std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+					std::unique_lock<std::shared_mutex> eraseList(eraseListMutex);
+					phmap::erase_if(playersToSaveList, [currentPlayer](const Player* p) { return p == currentPlayer; });
+					eraseList.unlock();
+				}
 			}
 
-			std::unique_lock<std::mutex> savePlayerLock(savePlayerMutex);
 			for (const auto &it : Game().guilds) {
 				IOGuild::saveGuild(it.second);
 			}
-			savePlayerLock.unlock();
+
 			savePlayerInProgress = false;
 		});
 		savePlayerThread.detach();
@@ -82,6 +93,22 @@ void Save::removePlayerFromSaveQueue(Player* player) {
 	}
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	std::lock_guard<std::mutex> eraseLock(eraseListMutex);
-	playersToSaveList.erase(player);
+	std::unique_lock<std::shared_mutex> eraseLock(eraseListMutex);
+	phmap::erase_if(playersToSaveList, [player](const Player* p) { return p == player; });
+	eraseLock.unlock();
+}
+
+bool Save::checkIfPlayerInList(Player* player) {
+    bool playerInListSave = false;
+    if (!Save::playersToSaveList.empty()) {
+        std::shared_lock<std::shared_mutex> lock(Save::listPlayerMutex);
+        for (auto it = Save::playersToSaveList.begin(); it != Save::playersToSaveList.end(); ++it) {
+            if (*it == player) {
+                playerInListSave = true;
+                break;
+            }
+        }
+        lock.unlock();
+    }
+    return playerInListSave;
 }

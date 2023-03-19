@@ -19,6 +19,7 @@ class Save {
 		static bool savePlayerAsync(Player* player);
 		static bool saveHouseAsync(bool saveHouse);
 		static void removePlayerFromSaveQueue(Player* player);
+		static bool checkIfPlayerInList(Player* player);
 
 	private:
 		static playerHashSet playersToSaveList;
@@ -26,10 +27,12 @@ class Save {
 		static std::atomic_bool saveHouseInProgress;
 		static std::jthread savePlayerThread;
 		static std::jthread saveHouseThread;
-		static std::mutex listPlayerMutex;
-		static std::mutex savePlayerMutex;
+		static std::shared_mutex listPlayerMutex;
+		static std::shared_mutex eraseListMutex;
+		static std::shared_mutex savePlayerMutex;
 		static std::mutex saveHouseMutex;
-		static std::mutex eraseListMutex;
+
+		friend class ProtocolGame;
 };
 
 #endif // SRC_IO_SAVE_SAVE_HPP_

@@ -247,10 +247,6 @@ void Game::setGameState(GameState_t newState) {
 }
 
 void Game::saveGameState() {
-	if (gameState == GAME_STATE_NORMAL) {
-		setGameState(GAME_STATE_MAINTAIN);
-	}
-
 	SPDLOG_INFO("Saving server...");
 
 	for (const auto &it : players) {
@@ -261,10 +257,6 @@ void Game::saveGameState() {
 	Save::saveHouseAsync(true);
 
 	g_databaseTasks().flush();
-
-	if (gameState == GAME_STATE_MAINTAIN) {
-		setGameState(GAME_STATE_NORMAL);
-	}
 }
 
 bool Game::loadItemsPrice() {
