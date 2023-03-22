@@ -99,16 +99,16 @@ void Save::removePlayerFromSaveQueue(Player* player) {
 }
 
 bool Save::checkIfPlayerInList(Player* player) {
-    bool playerInListSave = false;
-    if (!Save::playersToSaveList.empty()) {
-        std::shared_lock<std::shared_mutex> lock(Save::listPlayerMutex);
-        for (auto it = Save::playersToSaveList.begin(); it != Save::playersToSaveList.end(); ++it) {
-            if (*it == player) {
-                playerInListSave = true;
-                break;
-            }
-        }
-        lock.unlock();
-    }
-    return playerInListSave;
+	bool playerInListSave = false;
+	if (!Save::playersToSaveList.empty()) {
+		std::shared_lock<std::shared_mutex> lock(Save::listPlayerMutex);
+		for (auto it = Save::playersToSaveList.begin(); it != Save::playersToSaveList.end(); ++it) {
+			if (*it == player) {
+				playerInListSave = true;
+				break;
+			}
+		}
+		lock.unlock();
+	}
+	return playerInListSave;
 }
