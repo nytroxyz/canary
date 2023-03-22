@@ -406,7 +406,7 @@ int32_t Player::getDefense() const {
 	auto value4 = value3 * static_cast<double>(getDefenseFactor());
 	auto value5 = value4 * static_cast<double>(vocation->defenseMultiplier);
 
-	//SPDLOG_WARN("1: {}, 2: {}, 3: {}, 4: {}, 5: {}", value1, value2, value3, value4, value5);
+	// SPDLOG_WARN("1: {}, 2: {}, 3: {}, 4: {}, 5: {}", value1, value2, value3, value4, value5);
 
 	return value5;
 }
